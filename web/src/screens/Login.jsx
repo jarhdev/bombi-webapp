@@ -25,8 +25,8 @@ export function Login({ onLogin }) {
   return (
     <form className="login" onSubmit={entrar}>
       <div className="brand">
-        <span className="logo"><img src="/logo.svg" alt="" /></span>
-        <h1>Bombi · Control</h1>
+        <img className="logo-completo" src="/logo-completo.png" alt="Bombi" />
+        <h1>Control</h1>
         <p>Ventas, gastos y cuentas por cobrar</p>
       </div>
       <label className="field">
@@ -49,7 +49,7 @@ export function Mensaje({ titulo, texto, accion }) {
   return (
     <div className="screen">
       <div className="center-msg">
-        <span className="logo" style={{ width: 96, height: 96 }}><img src="/logo.svg" alt="" /></span>
+        <span className="logo" style={{ width: 96, height: 96 }}><img src="/logo.png" alt="" /></span>
         <h1 style={{ fontSize: 24, fontWeight: 800 }}>{titulo}</h1>
         <p>{texto}</p>
         {accion}

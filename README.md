@@ -46,8 +46,9 @@ Nunca van en el repo ni en el frontend: token del bot, ID del Sheet, API key de 
 
 ```
 web/                  Frontend (React + Vite + vite-plugin-pwa)
-  public/             logo.svg e íconos de la PWA (npm run icons los regenera)
-  scripts/            write-redirects.mjs (proxy /api en Netlify), make-icons.mjs
+  assets/             logo original de Bombi (fuente de los íconos)
+  public/             logos e íconos de la PWA (npm run icons los regenera con Python + Pillow)
+  scripts/            write-redirects.mjs (proxy /api en Netlify), make-icons.py
   src/api/            cliente de n8n, sesión y errores
   src/mocks/          API de prueba con el mismo contrato que n8n
   src/screens/        Resumen, Registro, PorCobrar, Ajustes (Usuarios, Productos, Tasa), Login

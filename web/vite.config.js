@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['logo.svg', 'apple-touch-icon.png'],
+        includeAssets: ['favicon.png', 'logo.png', 'logo-completo.png', 'apple-touch-icon.png'],
         manifest: {
           name: 'Bombi Control',
           short_name: 'Bombi',

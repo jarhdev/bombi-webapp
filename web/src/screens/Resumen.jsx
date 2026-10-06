@@ -44,7 +44,7 @@ export default function Resumen({ usuario, go, notify }) {
     <div className="screen">
       <header className="hello">
         <div className="hello-id">
-          <span className="logo"><img src="/logo.svg" alt="" /></span>
+          <span className="logo"><img src="/logo.png" alt="" /></span>
           <div className="hello-text">
             <small>Hola, {usuario.nombre}</small>
             <strong>Bombi · Control</strong>
