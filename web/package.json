@@ -1,0 +1,22 @@
+{
+  "name": "bombi-control",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/write-redirects.mjs",
+    "preview": "vite preview",
+    "icons": "node scripts/make-icons.mjs",
+    "test": "node --test src/lib/*.test.js"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.3",
+    "vite-plugin-pwa": "^2.0.0"
+  }
+}
