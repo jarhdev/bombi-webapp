@@ -7,7 +7,7 @@ import { round2, toUsd } from '../lib/format.js'
 import { ApiError } from '../api/errors.js'
 import { getToken } from '../api/session.js'
 
-const KEY = 'bombi-mock-db-v2'
+const KEY = 'bombi-mock-db-v3'
 const vistos = new Set() // request_id ya procesados (idempotencia)
 
 function load() {

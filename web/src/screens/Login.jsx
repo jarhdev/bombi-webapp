@@ -40,7 +40,7 @@ export function Login({ onLogin }) {
       </label>
       {error && <div className="notice warn" role="alert">{error}</div>}
       <button className="btn btn-primary btn-block btn-lg" disabled={cargando}>{cargando ? 'Entrando…' : 'Entrar'}</button>
-      {USE_MOCKS && <p className="hint" style={{ textAlign: 'center' }}>Modo demo: entra como <b>Jose</b> con PIN <b>1234</b> (admin) o <b>Vendedor</b> con <b>5678</b>.</p>}
+      {USE_MOCKS && <p className="hint" style={{ textAlign: 'center' }}>Modo demo: entra como <b>Jose</b> con PIN <b>1234</b> (admin) o <b>Victor</b> con <b>5678</b>.</p>}
     </form>
   )
 }

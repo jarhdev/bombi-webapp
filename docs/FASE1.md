@@ -41,3 +41,12 @@ Esto confirma la decisión 1: el bot ya usa botones con `callback_data`. Si la w
 | 6 | **Mismo número de orden.** El bot y la app calculan el siguiente número igual (máximo + 1). Si los dos crean una orden en el mismo segundo, podrían repetir número. | Aceptable para 4 personas. La app avisa el número final al guardar. |
 | 7 | **"Registrado por"** usa el primer nombre de Telegram (Jose, Laura). | Crear los usuarios de la app con esos mismos nombres para que los reportes coincidan. |
 | 8 | **Tasa del bot**: el bot usa la tasa del momento en que se confirma, aunque el capture sea de otro día. | Sin cambio. La app usa la tasa de la fecha del registro, editable. Las dos conviven bien. |
+
+## Decisiones (7 oct 2026)
+
+1. `Orden` ya está en Ventas (la agregó Jose).
+2. Fórmulas de Bot y Resumen: se sacan con el menú **Bombi → 3. Copiar fórmulas** (`sheets/preparar-sheet.gs`) para ajustarlas con `Anulado`.
+3. Órdenes del bot: se quedan como están; la app maneja Bs, USD y monto 0.
+4. y 5. Eran pruebas, no hay nada que corregir.
+- Usuarios: Jose y Laura (admin), Victor y Paola (usuario).
+- Columnas y pestañas nuevas: se agregan con `sheets/preparar-sheet.gs` (ver `docs/GUIA.md`, sección 2).

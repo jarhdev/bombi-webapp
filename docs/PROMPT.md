@@ -32,7 +32,7 @@ Versión revisada del prompt original (`docs/prompt-original.md`) con las decisi
 
 ## Columnas del Google Sheets (archivo `Bombi_Control_Ventas`)
 
-Revisadas el 7 oct 2026 con el export del bot y capturas de la hoja. Regla: las columnas existentes no se tocan; lo nuevo va **al final**. Las columnas que el bot no conoce quedan vacías en sus filas (el bot guarda con "Map automatically" e ignora lo que sobra), así que agregarlas no lo rompe.
+Revisadas el 7 oct 2026 con el export del bot y capturas de la hoja. `sheets/preparar-sheet.gs` agrega todo lo nuevo de esta sección. Regla: las columnas existentes no se tocan; lo nuevo va **al final**. Las columnas que el bot no conoce quedan vacías en sus filas (el bot guarda con "Map automatically" e ignora lo que sobra), así que agregarlas no lo rompe.
 
 **Valores compartidos con el bot** (la app usa exactamente estos):
 - Moneda: `Bs` o `USD`.
@@ -57,6 +57,7 @@ Nuevas al final: `Registrado por`, `Origen`, `Moneda pago`, `Monto pagado`, `Tas
 **Pestañas nuevas:**
 - **Productos:** `id`, `Nombre`, `Categoría`, `Presentación`, `Precio USD`, `Activo` (sí/no).
 - **Usuarios:** `id`, `nombre`, `telegram_id`, `pin_hash`, `pin_sal`, `rol` (admin/usuario), `estado` (activo/pendiente/inactivo), `fecha_creacion`, `intentos_fallidos`, `bloqueado_hasta`.
+  Usuarios iniciales: **Jose** y **Laura** (admin), **Victor** y **Paola** (usuario). `pin_hash` = SHA-256 en hexadecimal de `pin_sal + ":" + pin`.
 - **Tasas:** `Fecha valor`, `Tasa`, `Fuente`, `Consultada`. No se duplica si no cambian la tasa ni la fecha valor.
 
 ## Contrato de los endpoints (n8n)

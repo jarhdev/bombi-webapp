@@ -30,7 +30,7 @@ npm test           # pruebas de formatos, fechas y productos
 npm run build      # build de producción en web/dist
 ```
 
-En modo demo se entra como **Jose / 1234** (admin) o **Vendedor / 5678**. Los datos de prueba se guardan solo en ese navegador; "Ajustes → Reiniciar datos de prueba" los restablece.
+En modo demo se entra como **Jose / 1234** (admin) o **Victor / 5678**. Los datos de prueba se guardan solo en ese navegador; "Ajustes → Reiniciar datos de prueba" los restablece.
 
 ## Variables de entorno
 
@@ -56,6 +56,7 @@ web/                  Frontend (React + Vite + vite-plugin-pwa)
   src/components/     íconos, controles, capture con IA, selector de productos
   src/lib/            formatos Bs/$, fechas en hora de Caracas, compresión de imágenes
   src/telegram/       integración con telegram-web-app.js
+sheets/               Apps Script para preparar el Google Sheet (columnas, pestañas, PIN)
 n8n/backup/           export de los workflows actuales del bot (sin modificar)
 n8n/workflows/        workflows nuevos de la webapp
 docs/                 prompt corregido, prompt original y guía
