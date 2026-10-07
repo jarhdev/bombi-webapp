@@ -62,21 +62,21 @@ Nuevas al final: `Registrado por`, `Origen`, `Moneda pago`, `Monto pagado`, `Tas
 
 ## Contrato de los endpoints (n8n)
 
-La app llama a `/api/<ruta>`; Netlify lo reenvía a `<N8N_BASE_URL>/webhook/bombi/<ruta>`. Todas las rutas, menos `auth`, exigen `Authorization: Bearer <token>`. Una respuesta de error es `{ ok: false, error: "mensaje" }` con su código HTTP.
+La app llama a `/api/<ruta>`; Netlify lo reenvía a `<N8N_API_URL>/<ruta>` (todas son `POST`). Todas las rutas, menos `auth`, exigen `Authorization: Bearer <token>`. Una respuesta de error es `{ ok: false, error: "mensaje" }` con su código HTTP.
 
-| Método y ruta | Envía | Responde |
+| Ruta (POST) | Envía | Responde |
 |---|---|---|
-| `POST auth` | `{ initData }` o `{ nombre, pin }` | `{ estado, usuario: {id, nombre, rol}, token, expira }` |
-| `GET resumen?periodo=hoy\|semana\|mes` | — | `{ desde, hasta, ventas_usd, gastos_usd, ganancia_usd, por_cobrar: {cantidad, total_usd}, ultimos: [...5], tasa }` |
-| `GET tasa` | — | `{ tasa, fecha_valor, fuente, consultada }` |
-| `POST tasa` (admin) | `{ accion: "actualizar" }` | igual que `GET tasa` + `sin_cambios` |
-| `POST leer-capture` | multipart `capture` | `{ monto, moneda, referencia, fecha, metodo, banco }` |
-| `POST registro` | multipart `data` (JSON) + `capture` opcional | `{ ok, id }` u `{ ok, orden }`; `409 { duplicado }` si la referencia existe |
-| `GET por-cobrar` | — | `{ ordenes: [...], total_usd, proximo_numero }` |
-| `POST cobrar` | multipart `data` + `capture` | `{ ok }`; `409 { duplicado }` |
-| `POST anular` (admin) | `{ tipo, id }` | `{ ok }` |
-| `GET productos` / `POST productos` (admin) | `{ productos: [...] }` | `{ productos }` / `{ ok }` |
-| `GET usuarios` / `POST usuarios` (admin) | `{ accion: crear\|aprobar\|activar\|desactivar\|cambiar_pin\|cambiar_rol, ... }` | `{ usuarios }` / `{ ok }` |
+| `auth` | `{ initData }` o `{ nombre, pin }` | `{ estado, usuario: {id, nombre, rol}, token, expira }` |
+| `resumen` | `{ periodo: hoy\|semana\|mes }` | `{ desde, hasta, ventas_usd, gastos_usd, ganancia_usd, por_cobrar: {cantidad, total_usd}, ultimos: [...5], tasa }` |
+| `tasa` | — | `{ tasa, fecha_valor, fuente, consultada }` |
+| `tasa-actualizar` (admin) | — | igual que `tasa` + `sin_cambios` |
+| `leer-capture` | multipart `capture` | `{ monto, moneda, referencia, fecha, metodo, banco }` |
+| `registro` | multipart `data` (JSON) + `capture` opcional | `{ ok, id }` u `{ ok, orden }`; `409 { duplicado }` si la referencia existe |
+| `por-cobrar` | — | `{ ordenes: [...], total_usd, hay_bs, proximo_numero }` |
+| `cobrar` | multipart `data` + `capture` | `{ ok, id }`; `409 { duplicado }` |
+| `anular` (admin) | `{ tipo, id }` | `{ ok }` |
+| `productos` / `productos-guardar` (admin) | — / `{ productos: [...] }` | `{ productos }` / `{ ok }` |
+| `usuarios` / `usuarios-accion` (admin) | — / `{ accion: crear\|aprobar\|activar\|desactivar\|cambiar_pin\|cambiar_rol, ... }` | `{ usuarios }` / `{ ok }` |
 
 El modo demo (`web/src/mocks/mockApi.js`) implementa exactamente este contrato y sirve de referencia para los workflows.
 

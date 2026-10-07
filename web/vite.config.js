@@ -3,10 +3,10 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig(({ mode }) => {
-  // N8N_BASE_URL no lleva prefijo VITE_: nunca llega al navegador.
+  // N8N_API_URL no lleva prefijo VITE_: nunca llega al navegador.
   // En local, Vite reenvía /api/* a n8n igual que el proxy de Netlify en producción.
   const env = loadEnv(mode, process.cwd(), '')
-  const n8n = env.N8N_BASE_URL?.replace(/\/$/, '')
+  const n8n = env.N8N_API_URL?.replace(/\/$/, '')
 
   return {
     plugins: [
@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       host: true,
-      proxy: n8n ? { '/api': { target: n8n, changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, '/webhook/bombi') } } : undefined,
+      proxy: n8n ? { '/api': { target: new URL(n8n).origin, changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, new URL(n8n).pathname) } } : undefined,
     },
   }
 })

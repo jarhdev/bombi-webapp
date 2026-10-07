@@ -39,7 +39,7 @@ Copia `web/.env.example` a `web/.env`.
 | Variable | Para qué |
 |---|---|
 | `VITE_USE_MOCKS` | `true` = modo demo con datos de prueba. `false` = usa n8n. |
-| `N8N_BASE_URL` | URL pública de n8n, sin `/webhook`. La usan el proxy de Vite (local) y el build de Netlify para reenviar `/api/*`. No llega al navegador. |
+| `N8N_API_URL` | URL del webhook de la API sin la ruta final: `https://<n8n>/webhook/965c5b23-db71-4888-825a-09d1943686ab/bombi`. La usan el proxy de Vite (local) y el build de Netlify para reenviar `/api/*`. No llega al navegador. |
 
 Nunca van en el repo ni en el frontend: token del bot, ID del Sheet, API key de Gemini. Esos viven en las credenciales de n8n.
 

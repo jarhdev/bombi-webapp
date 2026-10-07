@@ -38,7 +38,7 @@ Si tu tabla tiene un filtro en la fila 1, puede que no incluya las columnas nuev
 
 Cuando estén los workflows de n8n:
 
-1. En Netlify, agrega `N8N_BASE_URL` = la URL pública de n8n (la misma de `WEBHOOK_URL`, sin `/webhook`).
+1. En Netlify, agrega `N8N_API_URL` = `<WEBHOOK_URL>/webhook/965c5b23-db71-4888-825a-09d1943686ab/bombi` (sin `/` final).
 2. Cambia `VITE_USE_MOCKS` a `false` y vuelve a desplegar.
 
 ## Próximas secciones

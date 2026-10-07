@@ -42,18 +42,21 @@ function multipart(campos, capture) {
   return form
 }
 
+// Todas las rutas son POST /api/<ruta>; Netlify (o Vite en local) las reenvía al webhook de n8n.
+const post = (ruta, json = {}) => request(`/${ruta}`, { method: 'POST', json })
+
 export const httpApi = {
-  auth: (body) => request('/auth', { method: 'POST', json: body }),
-  resumen: (periodo) => request(`/resumen?periodo=${encodeURIComponent(periodo)}`),
-  tasa: () => request('/tasa'),
-  actualizarTasa: () => request('/tasa', { method: 'POST', json: { accion: 'actualizar' } }),
+  auth: (body) => post('auth', body),
+  resumen: (periodo) => post('resumen', { periodo }),
+  tasa: () => post('tasa'),
+  actualizarTasa: () => post('tasa-actualizar'),
   leerCapture: (blob) => request('/leer-capture', { method: 'POST', form: multipart({}, blob) }),
   registrar: ({ capture, ...campos }) => request('/registro', { method: 'POST', form: multipart(campos, capture) }),
-  porCobrar: () => request('/por-cobrar'),
+  porCobrar: () => post('por-cobrar'),
   cobrar: ({ capture, ...campos }) => request('/cobrar', { method: 'POST', form: multipart(campos, capture) }),
-  anular: (body) => request('/anular', { method: 'POST', json: body }),
-  productos: () => request('/productos'),
-  guardarProductos: (body) => request('/productos', { method: 'POST', json: body }),
-  usuarios: () => request('/usuarios'),
-  usuarioAccion: (body) => request('/usuarios', { method: 'POST', json: body }),
+  anular: (body) => post('anular', body),
+  productos: () => post('productos'),
+  guardarProductos: (body) => post('productos-guardar', body),
+  usuarios: () => post('usuarios'),
+  usuarioAccion: (body) => post('usuarios-accion', body),
 }
