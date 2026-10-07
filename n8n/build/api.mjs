@@ -56,10 +56,15 @@ const extraer = node({ type: 'n8n-nodes-base.extractFromFile', version: 1, confi
 const prepararLectura = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Preparar lectura',
   parameters: { mode: 'runOnceForAllItems', jsCode: ${src('preparar-lectura.js')} } }, output: [{ modelo: 'gemini', body: {} }] });
 
-const gemini = node({ type: 'n8n-nodes-base.httpRequest', version: 4.2, config: { name: 'Gemini lee el capture', retryOnFail: true, maxTries: 3, waitBetweenTries: 3000, onError: 'continueRegularOutput',
-  parameters: { method: 'POST', url: expr('https://generativelanguage.googleapis.com/v1beta/models/{{ $json.modelo }}:generateContent'),
-    authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth', sendBody: true, specifyBody: 'json', jsonBody: expr('{{ JSON.stringify($json.body) }}'), options: { timeout: 30000 } },
+const GEMINI = (nombre, modelo, timeout) => node({ type: 'n8n-nodes-base.httpRequest', version: 4.2, config: { name: nombre, onError: 'continueRegularOutput',
+  parameters: { method: 'POST', url: expr('https://generativelanguage.googleapis.com/v1beta/models/{{ ' + modelo + ' }}:generateContent'),
+    authentication: 'genericCredentialType', genericAuthType: 'httpHeaderAuth', sendBody: true, specifyBody: 'json', jsonBody: expr("{{ JSON.stringify($('Preparar lectura').first().json.body) }}"), options: { timeout } },
   credentials: { httpHeaderAuth: { id: '9nZlpeyvtgcAY3Rf', name: 'Header Auth account' } } }, output: [{ candidates: [] }] });
+// Un intento con el principal (20 s) y, si falla, uno con el respaldo (15 s): la app recibe respuesta antes de sus 45 s.
+const gemini = GEMINI('Gemini lee el capture', "$('Preparar lectura').first().json.modelo", 20000);
+const leyo = ifElse({ version: 2.2, config: { name: '¿Gemini respondió?', parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+  conditions: [ { leftValue: expr('{{ !$json.error && ($json.candidates?.[0]?.content?.parts || []).some(p => p.text) }}'), operator: { type: 'boolean', operation: 'true', singleValue: true }, rightValue: '' } ], combinator: 'and' }, options: {} } } });
+const respaldo = GEMINI('Gemini respaldo', "$('Preparar lectura').first().json.respaldo", 15000);
 
 const interpretar = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Interpretar lectura',
   parameters: { mode: 'runOnceForAllItems', jsCode: ${src('interpretar-lectura.js')} } }, output: [{ status: 200, respuesta: {} }] });
@@ -87,14 +92,15 @@ export default workflow('bombi-api-webapp', 'Bombi · API webapp')
   .add(api).to(config).to(hojas).to(logica)
   .to(paso
     .onCase(0, hayCapture.onTrue(drive.to(separar)).onFalse(separar))
-    .onCase(1, extraer.to(prepararLectura.to(gemini.to(interpretar.to(responder)))))
+    .onCase(1, extraer.to(prepararLectura.to(gemini.to(leyo.onTrue(interpretar).onFalse(respaldo.to(interpretar))))))
     .onCase(2, tasa.to(respTasa.to(responder)))
     .onCase(3, responder))
   .add(separar).to(escribir.to(resultado.to(responder)))
+  .add(interpretar).to(responder)
   .add(responder).to(avisos).to(telegram)
   .add(nota)
   .group('Escribir en el Sheet', [hayCapture, drive, separar, escribir, resultado], { description: 'Sube el capture a Drive si hay, agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
-  .group('Leer capture con IA', [extraer, prepararLectura, gemini, interpretar], { description: 'Gemini lee monto, referencia, fecha, método y banco del capture (mismo modelo y credencial que el bot).' })
+  .group('Leer capture con IA', [extraer, prepararLectura, gemini, leyo, respaldo, interpretar], { description: 'Gemini lee monto, referencia, fecha, método y banco del capture; si el modelo principal falla, usa el de respaldo.' })
   .group('Tasa a pedido', [tasa, respTasa], { description: 'Ejecuta el workflow Bombi · Tasa BCV y responde la tasa nueva.' })
   .group('Avisos', [avisos, telegram], { description: 'Después de responder, avisa por Telegram a los admins (por ejemplo, usuario nuevo pendiente).' });
 `

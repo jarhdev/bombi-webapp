@@ -1,6 +1,9 @@
 // Arma la petición a Gemini con la imagen del capture (mismo enfoque que el bot).
-let modelo = 'gemini-3.1-flash-lite';
-for (const i of $('Leer config').all()) if (i.json.clave === 'gemini_model' && i.json.valor) modelo = i.json.valor;
+// Modelo principal y de respaldo: claves gemini_modelo_principal y gemini_modelo_respaldo de bombi_config.
+const cfg = {};
+for (const i of $('Leer config').all()) if (i.json.valor) cfg[i.json.clave] = String(i.json.valor).trim();
+const modelo = cfg.gemini_modelo_principal || 'gemini-3.5-flash-lite';
+const respaldo = cfg.gemini_modelo_respaldo || cfg.gemini_model || 'gemini-3.1-flash-lite';
 const item = $input.first();
 const mime = $('Lógica Bombi').first().binary?.capture?.mimeType || 'image/jpeg';
 const d = new Date(Date.now() - 4 * 3600e3);
@@ -17,7 +20,7 @@ Reglas:
 - referencia: el número de referencia u operación tal como aparece (solo dígitos y letras), o "".
 - banco: banco emisor si se ve (Banesco, Mercantil, Venezuela, Provincial, BNC, etc.), o "".
 - No inventes datos: deja "" o 0 si no se ve.`;
-return [{ json: { modelo, body: {
+return [{ json: { modelo, respaldo, body: {
   system_instruction: { parts: [{ text: sistema }] },
   contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mime, data: item.json.img } }, { text: 'Captura de pago.' }] }],
   generationConfig: { temperature: 0, responseMimeType: 'application/json' },

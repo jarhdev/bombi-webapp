@@ -24,7 +24,9 @@ Columnas `clave` / `valor` / `nota`. Nada de esto va en el repo ni en el fronten
 | `token_secret` | Secreto para firmar las sesiones (mín. 32 caracteres). Cambiarlo cierra la sesión de todos. |
 | `sheet_id` | ID del Google Sheet (el mismo del bot). |
 | `telegram_bot_token` | Token del bot; solo se usa para validar la entrada desde la Mini App. Vacío = solo nombre + PIN. |
-| `gemini_model` | Modelo para leer captures (`gemini-3.1-flash-lite`). |
+| `gemini_modelo_principal` | Modelo que lee los captures de la webapp (`gemini-3.5-flash-lite`). Un intento de 20 s. |
+| `gemini_modelo_respaldo` | Se usa si el principal falla o tarda (`gemini-3.1-flash-lite`). Un intento de 15 s. Así la app recibe respuesta antes de sus 45 s. |
+| `gemini_model` | Valor anterior; solo se usa si falta `gemini_modelo_respaldo`. |
 | `drive_folder_id` | Carpeta de Drive donde se guardan los captures (`Bombi-webapp-captures`). El archivo se llama como el ID del registro (`V-…`/`G-…`) y su link va en la columna Link capture. Si está vacía, se suben a la raíz de Drive. |
 
 Si una clave aparece dos veces, se usa la fila que tenga valor.
