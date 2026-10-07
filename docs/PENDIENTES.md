@@ -25,7 +25,7 @@ Actualizado: 2026-10-07.
 
 ## Pendientes
 
-0. **Duplicado por Drive lento** (propuesta pendiente de aprobación): la subida a Drive puede colgarse minutos; la app reintenta y se duplica la venta. Propuesta: guardar en el Sheet y responder primero, subir el capture después y completar `Link capture`. Duplicado a anular: `V-261007-121401` (Ventas fila 24, sin capture).
+0. **Duplicado por Drive lento** (corregido 2026-10-07): ahora se guarda en el Sheet y se responde primero; el capture se sube a Drive después y `Link capture` se completa al terminar. Falta anular el duplicado `V-261007-121401` (Ventas fila 24, sin capture).
 
 1. **Sheet**: en `Por cobrar`, cambiar S1 de `Request_id` a `Request id` (con espacio) para activar la protección contra órdenes duplicadas.
 2. **Bot de Telegram**: no recibe mensajes desde el 2026-10-06 16:02. Probable bloqueo temporal de Telegram al registrar el webhook (429 "retry after") mientras Funnel estaba caído. Arreglo: esperar, confirmar Funnel y desactivar/activar el workflow del bot una sola vez. Falta el texto exacto del error.
