@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/write-redirects.mjs",
+    "build": "node scripts/check-env.mjs && vite build && node scripts/write-redirects.mjs",
     "preview": "vite preview",
     "icons": "python3 scripts/make-icons.py",
     "test": "node --test src/lib/*.test.js"

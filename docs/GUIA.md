@@ -41,6 +41,8 @@ Cuando estén los workflows de n8n:
 1. En Netlify, agrega `N8N_API_URL` = `<WEBHOOK_URL>/webhook/965c5b23-db71-4888-825a-09d1943686ab/bombi` (sin `/` final).
 2. Cambia `VITE_USE_MOCKS` a `false` y vuelve a desplegar.
 
+Antes de compilar, `scripts/check-env.mjs` revisa la configuración y detiene la publicación si el sitio principal quedaría en modo demo, si falta `N8N_API_URL` o si su formato no es `https://<n8n>/webhook/<id>/bombi`. El motivo aparece en el log del deploy en Netlify, con el prefijo `[config]`.
+
 ## Próximas secciones
 
 - Agregar usuarios desde la app (Fase 3).
