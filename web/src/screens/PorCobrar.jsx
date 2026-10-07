@@ -57,8 +57,14 @@ export default function PorCobrar({ back, go, notify }) {
                 </div>
                 <span className="amt">{o.monto > 0 ? formatMonto(o.monto, o.moneda) : 'Sin monto'}</span>
               </div>
+              {o.pagado_usd > 0 && (
+                <div className="abonos">
+                  <span>Pagado {formatUsd(o.pagado_usd)}{o.monto_usd > 0 ? ` de ${formatUsd(o.monto_usd)}` : ''}</span>
+                  <strong>Faltan {formatUsd(o.saldo_usd)}</strong>
+                </div>
+              )}
               <button className="btn btn-primary btn-block" onClick={() => setPagando(o)}>
-                <Icon name="camera" size={18} /> Marcar pagada + capture
+                <Icon name="camera" size={18} /> {o.pagado_usd > 0 ? 'Registrar otro pago + capture' : 'Registrar pago + capture'}
               </button>
             </article>
           )
@@ -75,8 +81,10 @@ export default function PorCobrar({ back, go, notify }) {
         <PagoSheet
           orden={pagando}
           onClose={() => setPagando(null)}
-          onDone={() => {
-            notify(`Orden #${pagando.orden} pagada · pasó a Ventas`)
+          onDone={(r) => {
+            notify(r?.cerrada === false
+              ? `Abono registrado · faltan ${formatUsd(r.saldo_usd)} de la orden #${pagando.orden}`
+              : `Orden #${pagando.orden} pagada · pasó a Ventas`)
             setPagando(null)
             cargar()
           }}
@@ -113,15 +121,19 @@ function PagoSheet({ orden, onClose, onDone }) {
   // Las órdenes de la app están en $; las del bot pueden estar en Bs (o en 0 si el bot no entendió el monto).
   // Si pagan en otra moneda se convierte con la tasa del día del pago.
   const tasa = parseMonto(tasaTxt)
+  // Con abonos previos se propone solo lo que falta (saldo).
   const ordenUsd = toUsd(orden.monto, orden.moneda, tasa)
+  const abonado = orden.pagado_usd || 0
+  const saldoUsd = round2(Math.max(0, ordenUsd - abonado))
   const esperado = !(orden.monto > 0) ? 0
-    : orden.moneda === moneda ? orden.monto
-    : moneda === 'USD' ? ordenUsd : round2(orden.monto * tasa)
+    : abonado === 0 && orden.moneda === moneda ? orden.monto
+    : moneda === 'USD' ? saldoUsd : round2(saldoUsd * tasa)
   const montoTexto = montoManual ? monto : esperado > 0 ? montoInput(esperado) : ''
   const montoNum = parseMonto(montoTexto)
   const montoUsd = toUsd(montoNum, moneda, tasa)
-  const diferencia = round2(montoUsd - ordenUsd)
+  const diferencia = round2(montoUsd - saldoUsd)
   const comparar = orden.monto > 0 && montoNum > 0
+  const parcial = comparar && diferencia <= -0.5
 
   function onLeido(d) {
     const nuevo = {}
@@ -141,14 +153,14 @@ function PagoSheet({ orden, onClose, onDone }) {
     setError(null)
     setGuardando(true)
     try {
-      await api.cobrar({
+      const r = await api.cobrar({
         request_id: requestId.current, orden: orden.orden, fecha, monto: montoNum, moneda, tasa,
         tasa_editada: tasaDia ? tasa !== tasaDia.tasa : true, monto_usd: montoUsd,
         monto_bs: moneda === 'Bs' ? montoNum : round2(montoNum * tasa), metodo, banco: banco.trim(),
         referencia: referencia.trim(), capture: capture?.blob || null, confirmar_duplicado: confirmarDuplicado,
       })
       vibrar('success')
-      onDone()
+      onDone(r)
     } catch (e) {
       if (e.status === 409 && e.data?.duplicado) setDuplicado(e.data.duplicado)
       else { setError(e.message); vibrar('error') }
@@ -175,6 +187,7 @@ function PagoSheet({ orden, onClose, onDone }) {
       <div className="notice">
         <strong>{orden.cliente} · {orden.monto > 0 ? formatMonto(orden.monto, orden.moneda) : 'sin monto en la orden'}</strong>
         {orden.productos}
+        {abonado > 0 && <span className="abonos-linea">Pagado {formatUsd(abonado)} · faltan {formatUsd(saldoUsd)}</span>}
       </div>
 
       <CaptureField capture={capture} onChange={(c) => { setCapture(c); if (!c) setIa({}) }} onLeido={onLeido} />
@@ -203,12 +216,14 @@ function PagoSheet({ orden, onClose, onDone }) {
         <div className="notice"><strong>≈ {formatUsd(montoUsd)}</strong></div>
       )}
       {comparar && (
-        <div className={`notice${Math.abs(diferencia) >= 0.5 ? ' warn' : ''}`}>
+        <div className={`notice${diferencia >= 0.5 ? ' warn' : ''}`}>
           <strong>
             {moneda === 'Bs' ? `≈ ${formatUsd(montoUsd)}` : formatUsd(montoUsd)}
-            {Math.abs(diferencia) < 0.5 ? ' · coincide con la orden' : ` · ${diferencia > 0 ? 'sobran' : 'faltan'} ${formatUsd(Math.abs(diferencia))}`}
+            {Math.abs(diferencia) < 0.5 ? (abonado > 0 ? ' · completa la orden' : ' · coincide con la orden')
+              : parcial ? ` · abono parcial` : ` · sobran ${formatUsd(diferencia)}`}
           </strong>
-          {Math.abs(diferencia) >= 0.5 && 'El monto no coincide con la orden. Revísalo antes de confirmar.'}
+          {parcial && `La orden quedará pendiente: faltarán ${formatUsd(Math.abs(diferencia))}.`}
+          {diferencia >= 0.5 && `Es más de lo que falta por cobrar (${formatUsd(saldoUsd)}). Revísalo antes de confirmar.`}
         </div>
       )}
 
@@ -236,7 +251,7 @@ function PagoSheet({ orden, onClose, onDone }) {
       {error && <div className="notice warn" role="alert">{error}</div>}
 
       <button className="btn btn-primary btn-block btn-lg" disabled={guardando} onClick={() => confirmar(false)}>
-        {guardando ? 'Guardando…' : 'Confirmar pago'}
+        {guardando ? 'Guardando…' : parcial ? 'Registrar abono' : 'Confirmar pago'}
       </button>
       <button className="btn btn-outline btn-block" onClick={onClose}>Cancelar</button>
     </Sheet>

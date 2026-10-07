@@ -72,8 +72,8 @@ La app llama a `/api/<ruta>`; Netlify lo reenvía a `<N8N_API_URL>/<ruta>` (toda
 | `tasa-actualizar` (admin) | — | igual que `tasa` + `sin_cambios` |
 | `leer-capture` | multipart `capture` | `{ monto, moneda, referencia, fecha, metodo, banco }` |
 | `registro` | multipart `data` (JSON) + `capture` opcional | `{ ok, id }` u `{ ok, orden }`; `409 { duplicado }` si la referencia existe |
-| `por-cobrar` | — | `{ ordenes: [...], total_usd, hay_bs, proximo_numero }` |
-| `cobrar` | multipart `data` + `capture` | `{ ok, id }`; `409 { duplicado }` |
+| `por-cobrar` | — | `{ ordenes: [{..., monto_usd, pagado_usd, saldo_usd}], total_usd (saldo), hay_bs, proximo_numero }` |
+| `cobrar` | multipart `data` + `capture` | `{ ok, id, cerrada, pagado_usd, saldo_usd }`; `409 { duplicado }`. Cada cobro es un abono: la orden se cierra cuando lo cobrado cubre el monto (±$0,50). |
 | `anular` (admin) | `{ tipo, id }` | `{ ok }` |
 | `productos` / `productos-guardar` (admin) | — / `{ productos: [...] }` | `{ productos }` / `{ ok }` |
 | `usuarios` / `usuarios-accion` (admin) | — / `{ accion: crear\|aprobar\|activar\|desactivar\|cambiar_pin\|cambiar_rol, ... }` | `{ usuarios }` / `{ ok }` |

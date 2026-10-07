@@ -183,12 +183,26 @@ function gasto(f) {
     concepto: txt(f.Concepto), categoria: txt(f['Categoría']), quien: txt(f['Registrado por']), origen: txt(f.Origen),
     request_id: txt(f['Request id']) };
 }
-function orden(f, tasa) {
+// Abonos: cada pago de una orden es una venta con su número en la columna Orden.
+// Devuelve { [orden]: total cobrado en USD } sin contar ventas anuladas.
+const TOLERANCIA_USD = 0.5;
+function abonosPorOrden(h) {
+  const t = {};
+  for (const v of h.Ventas.filas.map(venta)) {
+    const n = num(v.orden);
+    if (n > 0 && !v.anulado) t[n] = r2((t[n] || 0) + v.monto_usd);
+  }
+  return t;
+}
+function orden(f, tasa, abonos = {}) {
   const moneda = txt(f.Moneda) || 'USD';
   const monto = num(f.Monto);
+  const montoUsd = moneda === 'Bs' ? (tasa > 0 ? r2(monto / tasa) : 0) : r2(monto);
+  const pagado = abonos[num(f.Orden)] || 0;
   return { orden: num(f.Orden), fila: f._fila, fecha_entrega: fechaCelda(f['Fecha entrega']), cliente: txt(f.Cliente),
     productos: txt(f.Productos), monto, moneda, fecha_esperada_pago: fechaCelda(f['Fecha esperada pago']),
-    estado: sinAcentos(f.Estado) || 'pendiente', monto_usd: moneda === 'Bs' ? (tasa > 0 ? r2(monto / tasa) : 0) : r2(monto) };
+    estado: sinAcentos(f.Estado) || 'pendiente', monto_usd: montoUsd,
+    pagado_usd: pagado, saldo_usd: montoUsd > 0 ? r2(Math.max(0, montoUsd - pagado)) : 0 };
 }
 
 function resumen(ctx, h, res) {
@@ -196,7 +210,8 @@ function resumen(ctx, h, res) {
   const [desde, hasta] = rango(ctx.body.periodo, hoy);
   const tasa = ultimaTasa(h);
   const V = h.Ventas.filas.map(venta), G = h.Gastos.filas.map(gasto);
-  const O = h['Por cobrar'].filas.map((f) => orden(f, tasa?.tasa || 0));
+  const abonos = abonosPorOrden(h);
+  const O = h['Por cobrar'].filas.map((f) => orden(f, tasa?.tasa || 0, abonos));
   const enRango = (x) => !x.anulado && x.fecha >= desde && x.fecha <= hasta;
   const ventas = r2(V.filter(enRango).reduce((s, x) => s + x.monto_usd, 0));
   const gastos = r2(G.filter(enRango).reduce((s, x) => s + x.monto_usd, 0));
@@ -208,17 +223,18 @@ function resumen(ctx, h, res) {
     ...G.map((g) => ({ id: g.id, tipo: 'gasto', fecha: g.fecha, k: `${g.fecha} ${g.hora} ${String(g.fila).padStart(6, '0')}`, anulado: g.anulado,
       titulo: `Gasto · ${g.categoria || 'Otros'}`, detalle: [g.concepto, bot(g)].filter(Boolean).join(' · '), monto_usd: g.monto_usd })),
     ...O.map((o) => ({ id: `o${o.orden}`, tipo: 'cobrar', fecha: o.fecha_entrega, k: `${o.fecha_entrega} 00:00 ${String(o.fila).padStart(6, '0')}`, anulado: o.estado === 'anulada',
-      titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : 'Pendiente de cobro', monto_usd: o.monto_usd })),
+      titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : o.pagado_usd > 0 ? `Abonado $${o.pagado_usd.toFixed(2)} · faltan $${o.saldo_usd.toFixed(2)}` : 'Pendiente de cobro', monto_usd: o.monto_usd })),
   ].sort((a, b) => b.k.localeCompare(a.k)).slice(0, 5).map(({ k, ...m }) => m);
   return res(200, { desde, hasta, ventas_usd: ventas, gastos_usd: gastos, ganancia_usd: r2(ventas - gastos),
-    por_cobrar: { cantidad: pend.length, total_usd: r2(pend.reduce((s, o) => s + o.monto_usd, 0)) }, ultimos: movs, tasa });
+    por_cobrar: { cantidad: pend.length, total_usd: r2(pend.reduce((s, o) => s + (o.monto_usd > 0 ? o.saldo_usd : 0), 0)) }, ultimos: movs, tasa });
 }
 
 function porCobrar(ctx, h, res) {
   const tasa = ultimaTasa(h)?.tasa || 0;
-  const todas = h['Por cobrar'].filas.map((f) => orden(f, tasa));
+  const abonos = abonosPorOrden(h);
+  const todas = h['Por cobrar'].filas.map((f) => orden(f, tasa, abonos));
   const ordenes = todas.filter((o) => o.estado === 'pendiente').sort((a, b) => a.orden - b.orden);
-  return res(200, { ordenes: ordenes.map(({ fila, ...o }) => o), total_usd: r2(ordenes.reduce((s, o) => s + o.monto_usd, 0)),
+  return res(200, { ordenes: ordenes.map(({ fila, ...o }) => o), total_usd: r2(ordenes.reduce((s, o) => s + (o.monto_usd > 0 ? o.saldo_usd : 0), 0)),
     hay_bs: ordenes.some((o) => o.moneda === 'Bs'), proximo_numero: Math.max(0, ...todas.map((o) => o.orden)) + 1 });
 }
 
@@ -305,11 +321,19 @@ function cobrar(ctx, h, res, u) {
     Origen: 'webapp', 'Request id': txt(b.request_id) };
   if (ctx.tieneCapture) { venta['Link capture'] = LINK_CAPTURE; res.nombrarCapture(id); }
   res.escrituras.push({ tipo: 'append', hoja: 'Ventas', fila: filaPara(h.Ventas, venta) });
-  const cambios = { Estado: 'pagado', 'Fecha pago': fecha, 'Metodo de pago': b.metodo, Referencia: comoTexto(b.referencia),
-    'Moneda pago': m.moneda, 'Monto pagado': m.monto, 'Tasa pago': m.tasa, 'Monto pagado USD': m.usd };
+  // Abono parcial: la orden sigue pendiente hasta que lo cobrado cubra el monto (con $0,50 de tolerancia).
+  // Las órdenes sin monto (del bot) se cierran con el primer cobro, como antes.
+  const o = orden(f, m.tasa, abonosPorOrden(h));
+  const pagado = r2(o.pagado_usd + m.usd);
+  const cerrada = !(o.monto_usd > 0) || pagado >= o.monto_usd - TOLERANCIA_USD;
+  const saldo = o.monto_usd > 0 ? r2(Math.max(0, o.monto_usd - pagado)) : 0;
+  // Datos del último pago + total cobrado acumulado en "Monto pagado USD".
+  const cambios = { 'Metodo de pago': b.metodo, Referencia: comoTexto(b.referencia),
+    'Moneda pago': m.moneda, 'Monto pagado': m.monto, 'Tasa pago': m.tasa, 'Monto pagado USD': pagado };
+  if (cerrada) { cambios.Estado = 'pagado'; cambios['Fecha pago'] = fecha; }
   if (ctx.tieneCapture) cambios['Link capture'] = LINK_CAPTURE;
   for (const [col, valor] of Object.entries(cambios)) res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, col), valor });
-  return res(200, { ok: true, id });
+  return res(200, { ok: true, id, cerrada, pagado_usd: pagado, saldo_usd: cerrada ? 0 : saldo });
 }
 
 function anular(ctx, h, res) {
@@ -317,13 +341,28 @@ function anular(ctx, h, res) {
   if (tipo === 'cobrar') {
     const P = h['Por cobrar']; const f = P.filas.find((x) => `o${num(x.Orden)}` === txt(id));
     if (!f || sinAcentos(f.Estado) !== 'pendiente') throw new Fallo(400, 'Solo se pueden anular órdenes pendientes.');
+    if (abonosPorOrden(h)[num(f.Orden)] > 0) throw new Fallo(400, 'Esta orden tiene abonos. Anula primero esas ventas.');
     res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, 'Estado'), valor: 'anulada' });
     return res(200, { ok: true });
   }
   const t = tipo === 'venta' ? h.Ventas : tipo === 'gasto' ? h.Gastos : null;
   const f = t?.filas.find((x) => txt(x.ID) === txt(id));
   if (!f) throw new Fallo(404, 'Registro no encontrado.');
+  if (esSi(f.Anulado)) throw new Fallo(400, 'Ese registro ya está anulado.');
   res.escrituras.push({ tipo: 'update', rango: celda(t, f._fila, 'Anulado'), valor: 'sí' });
+  // Si era un abono de una orden, recalcula lo cobrado y reabre la orden si ya no está cubierta.
+  const n = tipo === 'venta' ? num(f.Orden) : 0;
+  const P = h['Por cobrar']; const fo = n > 0 ? P.filas.find((x) => num(x.Orden) === n) : null;
+  if (fo && sinAcentos(fo.Estado) !== 'anulada') {
+    const tasa = ultimaTasa(h)?.tasa || 0;
+    const o = orden(fo, tasa, abonosPorOrden(h));
+    const pagado = r2(Math.max(0, o.pagado_usd - r2(f['Monto USD'])));
+    res.escrituras.push({ tipo: 'update', rango: celda(P, fo._fila, 'Monto pagado USD'), valor: pagado });
+    if (o.estado === 'pagado' && o.monto_usd > 0 && pagado < o.monto_usd - TOLERANCIA_USD) {
+      res.escrituras.push({ tipo: 'update', rango: celda(P, fo._fila, 'Estado'), valor: 'pendiente' });
+      res.escrituras.push({ tipo: 'update', rango: celda(P, fo._fila, 'Fecha pago'), valor: '' });
+    }
+  }
   return res(200, { ok: true });
 }
 

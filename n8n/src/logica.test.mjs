@@ -187,3 +187,39 @@ test('capture: marca el link y nombra el archivo con el ID', () => {
   assert.ok(r.escrituras[0].fila.includes('{{LINK_CAPTURE}}'))
   assert.equal(llamar('registro', b, { token: t }).capture_nombre, undefined)
 })
+
+test('abonos parciales: la orden sigue pendiente hasta cubrir el monto', () => {
+  const t = login()
+  const lectura = conPin(fixture(), 'Jose', '1234')
+  const pc = lectura.valueRanges.find((v) => v.range.startsWith("'Por cobrar'")).values
+  const ventas = lectura.valueRanges.find((v) => v.range.startsWith('Ventas')).values
+  pc.push([3, 46301, 'PuroLomo', '7 galletas', 25, 'USD', 46304, 'pendiente'])
+  const pago = (monto, rid) => ({ orden: 3, monto, moneda: 'USD', tasa: 872.39, metodo: 'Zelle', referencia: 'Z' + rid, fecha: '2026-10-07', request_id: rid })
+  // Primer abono: $10 → sigue pendiente, faltan $15.
+  const a1 = llamar('cobrar', pago(10, 'a1'), { token: t, lectura })
+  assert.equal(a1.status, 200, JSON.stringify(a1.respuesta))
+  assert.equal(a1.respuesta.cerrada, false); assert.equal(a1.respuesta.saldo_usd, 15)
+  assert.ok(!a1.escrituras.some((e) => e.valor === 'pagado'))
+  assert.ok(a1.escrituras.some((e) => /Q\d+$/.test(e.rango) && e.valor === 10)) // Monto pagado USD acumulado
+  // Simula que la venta del abono ya está en la hoja.
+  const filaVenta = (id, usd, rid) => { const r = Array(20).fill(''); Object.assign(r, { 0: id, 1: 46302, 5: usd, 6: 'USD', 8: usd, 15: 3, 16: 'webapp', 19: rid }); return r }
+  ventas.push(filaVenta('V-A1', 10, 'a1'))
+  let lista = llamar('por-cobrar', {}, { token: t, lectura }).respuesta
+  const o3 = lista.ordenes.find((o) => o.orden === 3)
+  assert.equal(o3.pagado_usd, 10); assert.equal(o3.saldo_usd, 15)
+  // Segundo abono: $14.60 → cubre con la tolerancia de $0,50 y se cierra.
+  const a2 = llamar('cobrar', pago(14.6, 'a2'), { token: t, lectura })
+  assert.equal(a2.respuesta.cerrada, true); assert.equal(a2.respuesta.pagado_usd, 24.6)
+  assert.ok(a2.escrituras.some((e) => e.valor === 'pagado'))
+  // Mismo request id → no se registra dos veces.
+  ventas.push(filaVenta('V-A2', 14.6, 'a2'))
+  assert.equal(llamar('cobrar', pago(14.6, 'a2'), { token: t, lectura }).respuesta.repetido, true)
+  // La orden con abonos no se puede anular directo.
+  assert.equal(llamar('anular', { tipo: 'cobrar', id: 'o3' }, { token: t, lectura }).status, 400)
+  // Anular un abono de una orden cerrada la reabre y baja lo cobrado.
+  pc[pc.length - 1][7] = 'pagado'
+  const an = llamar('anular', { tipo: 'venta', id: 'V-A2' }, { token: t, lectura })
+  assert.equal(an.status, 200)
+  assert.ok(an.escrituras.some((e) => /H\d+$/.test(e.rango) && e.valor === 'pendiente'))
+  assert.ok(an.escrituras.some((e) => /Q\d+$/.test(e.rango) && e.valor === 10))
+})

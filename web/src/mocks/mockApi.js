@@ -47,10 +47,19 @@ function ultimaTasa() {
   return t[t.length - 1]
 }
 
-// Las órdenes del bot pueden estar en Bs: para el total se convierten con la tasa de hoy.
+// Abonos: cada pago de una orden es una venta con su número de orden (igual que en n8n).
+const TOLERANCIA_USD = 0.5
+function pagadoUsd(n) {
+  return round2(db().ventas.filter((v) => v.orden === n && !v.anulado).reduce((s, v) => s + (v.monto_usd || 0), 0))
+}
+// Las órdenes del bot pueden estar en Bs: se convierten con la tasa de hoy.
+function conSaldo(o, t = ultimaTasa().tasa) {
+  const monto_usd = toUsd(o.monto, o.moneda, t)
+  const pagado_usd = pagadoUsd(o.orden)
+  return { ...o, monto_usd, pagado_usd, saldo_usd: monto_usd > 0 ? round2(Math.max(0, monto_usd - pagado_usd)) : 0 }
+}
 function totalOrdenesUsd(ordenes) {
-  const t = ultimaTasa().tasa
-  return round2(ordenes.reduce((s, o) => s + toUsd(o.monto, o.moneda, t), 0))
+  return round2(ordenes.map((o) => conSaldo(o)).reduce((s, o) => s + o.saldo_usd, 0))
 }
 
 function idempotente(req) {
@@ -124,7 +133,7 @@ export const mockApi = {
       })),
       ...db().porCobrar.map((o) => ({
         id: `o${o.orden}`, tipo: 'cobrar', fecha: o.fecha_entrega, creado: o.creado, anulado: o.estado === 'anulada',
-        titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : 'Pendiente de cobro',
+        titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : pagadoUsd(o.orden) > 0 ? `Abonado $${pagadoUsd(o.orden).toFixed(2)} · faltan $${conSaldo(o).saldo_usd.toFixed(2)}` : 'Pendiente de cobro',
         monto_usd: toUsd(o.monto, o.moneda, ultimaTasa().tasa),
       })),
     ].sort((a, b) => (b.creado || '').localeCompare(a.creado || ''))
@@ -195,7 +204,7 @@ export const mockApi = {
   async porCobrar() {
     await wait()
     usuarioActual()
-    const ordenes = db().porCobrar.filter((o) => o.estado === 'pendiente').sort((a, b) => a.orden - b.orden)
+    const ordenes = db().porCobrar.filter((o) => o.estado === 'pendiente').sort((a, b) => a.orden - b.orden).map((o) => conSaldo(o))
     const proximo = Math.max(0, ...db().porCobrar.map((o) => o.orden)) + 1
     return { ordenes, total_usd: totalOrdenesUsd(ordenes), hay_bs: ordenes.some((o) => o.moneda === 'Bs'), proximo_numero: proximo }
   },
@@ -215,8 +224,11 @@ export const mockApi = {
       vistos.delete(req.request_id)
       throw new ApiError('Esa referencia ya está registrada.', 409, { duplicado: dup })
     }
-    o.estado = 'pagado'
-    o.fecha_pago = req.fecha
+    const antes = conSaldo(o, req.tasa)
+    const pagado = round2(antes.pagado_usd + toUsd(req.monto, req.moneda, req.tasa))
+    const cerrada = !(antes.monto_usd > 0) || pagado >= antes.monto_usd - TOLERANCIA_USD
+    if (cerrada) { o.estado = 'pagado'; o.fecha_pago = req.fecha }
+    o.monto_pagado_usd = pagado
     o.referencia = req.referencia || ''
     o.tasa_pago = req.tasa
     o.monto_pagado = req.monto
@@ -224,7 +236,7 @@ export const mockApi = {
     o.metodo_pago = req.metodo
     d.ventas.push({ id: nextId('V-'), fecha: req.fecha, cliente: o.cliente, productos: o.productos, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, banco: req.banco || '', referencia: req.referencia || '', origen: 'webapp', registrado_por: u.nombre, orden: o.orden, anulado: false, creado: new Date().toISOString(), capture: req.capture ? '(capture de prueba)' : '' })
     save()
-    return { ok: true }
+    return { ok: true, cerrada, pagado_usd: pagado, saldo_usd: cerrada ? 0 : round2(antes.monto_usd - pagado) }
   },
 
   async anular({ tipo, id }) {
@@ -234,12 +246,20 @@ export const mockApi = {
     if (tipo === 'cobrar') {
       const o = d.porCobrar.find((x) => `o${x.orden}` === id)
       if (!o || o.estado !== 'pendiente') throw new ApiError('Solo se pueden anular órdenes pendientes.', 400)
+      if (pagadoUsd(o.orden) > 0) throw new ApiError('Esta orden tiene abonos. Anula primero esas ventas.', 400)
       o.estado = 'anulada'
     } else {
       const list = tipo === 'venta' ? d.ventas : d.gastos
       const r = list.find((x) => x.id === id)
       if (!r) throw new ApiError('Registro no encontrado.', 404)
+      if (r.anulado) throw new ApiError('Ese registro ya está anulado.', 400)
       r.anulado = true
+      // Si era un abono, reabre la orden si lo cobrado ya no la cubre.
+      const o = r.orden ? d.porCobrar.find((x) => x.orden === r.orden) : null
+      if (o && o.estado === 'pagado') {
+        const s2 = conSaldo(o)
+        if (s2.monto_usd > 0 && s2.pagado_usd < s2.monto_usd - TOLERANCIA_USD) { o.estado = 'pendiente'; o.fecha_pago = '' }
+      }
     }
     save()
     return { ok: true }

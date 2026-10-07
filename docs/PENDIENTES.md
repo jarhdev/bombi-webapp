@@ -16,7 +16,16 @@ Actualizado: 2026-10-07.
 - La app, el bot y la tasa solo funcionan con la laptop encendida, n8n corriendo y Funnel activo.
 - Si la app dice "Error del servidor (502)": revisar `tailscale status` y `tailscale funnel status`; si falta el proxy, `tailscale funnel --bg 5678`.
 
+## Abonos parciales (2026-10-07)
+
+- Una orden se puede pagar en varias partes: cada pago es una venta con el número de orden y su capture.
+- La orden sigue pendiente hasta que lo cobrado cubre el monto (±$0,50); Por cobrar y el Resumen muestran el saldo.
+- `Monto pagado USD` en Por cobrar = acumulado; las demás columnas de pago guardan el último pago.
+- Anular un abono reabre la orden si ya no está cubierta. Una orden con abonos no se puede anular directo.
+
 ## Pendientes
+
+0. **Duplicado por Drive lento** (propuesta pendiente de aprobación): la subida a Drive puede colgarse minutos; la app reintenta y se duplica la venta. Propuesta: guardar en el Sheet y responder primero, subir el capture después y completar `Link capture`. Duplicado a anular: `V-261007-121401` (Ventas fila 24, sin capture).
 
 1. **Sheet**: en `Por cobrar`, cambiar S1 de `Request_id` a `Request id` (con espacio) para activar la protección contra órdenes duplicadas.
 2. **Bot de Telegram**: no recibe mensajes desde el 2026-10-06 16:02. Probable bloqueo temporal de Telegram al registrar el webhook (429 "retry after") mientras Funnel estaba caído. Arreglo: esperar, confirmar Funnel y desactivar/activar el workflow del bot una sola vez. Falta el texto exacto del error.

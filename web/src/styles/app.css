@@ -233,6 +233,9 @@ textarea.input { height: auto; min-height: 72px; padding: 10px 14px; resize: ver
 .order .who { font-size: 17px; font-weight: 700; }
 .order .meta { font-size: 13px; }
 .order .amt { font-size: 17px; font-weight: 800; white-space: nowrap; }
+.order .abonos { display: flex; justify-content: space-between; gap: 10px; border-radius: 12px; background: var(--bg); padding: 8px 12px; font-size: 14px; }
+.order .abonos strong { color: var(--accent); white-space: nowrap; }
+.notice .abonos-linea { display: block; margin-top: 4px; font-weight: 700; color: var(--accent); }
 .order .vencida { color: var(--accent); font-weight: 700; }
 
 /* ---------- Hoja inferior (modal) ---------- */
