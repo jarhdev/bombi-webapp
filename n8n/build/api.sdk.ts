@@ -23,14 +23,25 @@ const paso = switchCase({ version: 3.2, config: { name: 'Siguiente paso', parame
   { outputKey: 'tasa', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' }, conditions: [ { leftValue: expr('{{ $json.paso }}'), operator: { type: 'string', operation: 'equals' }, rightValue: 'tasa' } ], combinator: 'and' } }
 ] }, options: { fallbackOutput: 'extra', renameFallbackOutput: 'responder' } } } });
 
-const hayCapture = ifElse({ version: 2.2, config: { name: '¿Hay capture?', parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
-  conditions: [ { leftValue: expr('{{ $json.capture_nombre || "" }}'), operator: { type: 'string', operation: 'notEmpty', singleValue: true }, rightValue: '' } ], combinator: 'and' }, options: {} } } });
+const subir = ifElse({ version: 2.2, config: { name: '¿Subir capture?', parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+  conditions: [ { leftValue: expr("{{ $('Lógica Bombi').first().json.paso === 'escribir' && !!$('Lógica Bombi').first().json.capture_nombre && Number($json.status) < 300 }}"), operator: { type: 'boolean', operation: 'true', singleValue: true }, rightValue: '' } ], combinator: 'and' }, options: {} } } });
+
+const prepararSubida = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Preparar subida',
+  parameters: { mode: 'runOnceForAllItems', jsCode: "// Toma el capture que llegó con la petición para subirlo a Drive con el ID del registro como nombre.\nconst logica = $('Lógica Bombi').first();\nreturn [{ json: { capture_nombre: logica.json.capture_nombre }, binary: logica.binary }];\n" } }, output: [{ capture_nombre: 'V-1' }] });
 
 const drive = node({ type: 'n8n-nodes-base.googleDrive', version: 3, config: { name: 'Subir capture a Drive', onError: 'continueRegularOutput',
   parameters: { resource: 'file', operation: 'upload', inputDataFieldName: 'capture', name: expr('{{ $json.capture_nombre }}.jpg'),
     driveId: { __rl: true, mode: 'list', value: 'My Drive' },
     folderId: { __rl: true, mode: 'id', value: expr("{{ $('Leer config').all().find(i => i.json.clave === 'drive_folder_id' && i.json.valor)?.json.valor || 'root' }}") }, options: {} },
   credentials: { googleDriveOAuth2Api: { id: 'U4mYGuaHO0AXg6kz', name: 'Google Drive account' } } }, output: [{ id: 'abc' }] });
+
+const completar = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Completar link',
+  parameters: { mode: 'runOnceForAllItems', jsCode: "// Después de responder a la app: con el archivo ya en Drive, arma las celdas \"Link capture\" a llenar.\n// Filas agregadas: la fila real sale de la respuesta de \"Escribir en Sheets\" (updatedRange).\n// Celdas actualizadas (cobro de una orden): el rango ya se conoce.\nconst MARCA = '{{LINK_CAPTURE}}';\nconst archivo = $input.first().json;\nif (!archivo.id || archivo.error) return [];\nconst link = `https://drive.google.com/file/d/${archivo.id}/view`;\nconst letra = (i) => { let s = ''; i += 1; while (i > 0) { const r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); } return s; };\nconst data = [];\nconst pedidos = $('Separar escrituras').all();\nconst resultados = $('Escribir en Sheets').all();\npedidos.forEach((p, i) => {\n  const cols = p.json.columnasLink || [];\n  const m = String(resultados[i]?.json?.updates?.updatedRange || '').match(/![A-Z]+(\\d+)/);\n  if (!m) return;\n  cols.forEach((c, k) => {\n    if (c >= 0) data.push({ range: `'${p.json.hoja.replace(/'/g, \"''\")}'!${letra(c)}${Number(m[1]) + k}`, values: [[link]] });\n  });\n});\nfor (const e of $('Lógica Bombi').first().json.escrituras) {\n  if (e.tipo === 'update' && e.valor === MARCA) data.push({ range: e.rango, values: [[link]] });\n}\nif (!data.length) return [];\nlet sheetId = '';\nfor (const i of $('Leer config').all()) if (i.json.clave === 'sheet_id' && i.json.valor) sheetId = i.json.valor;\nreturn [{ json: { url: `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchUpdate`,\n  body: { valueInputOption: 'USER_ENTERED', data } } }];\n" } }, output: [{ url: 'https://x', body: {} }] });
+
+const guardarLink = node({ type: 'n8n-nodes-base.httpRequest', version: 4.2, config: { name: 'Guardar link', retryOnFail: true, maxTries: 3, onError: 'continueRegularOutput',
+  parameters: { method: 'POST', url: expr('{{ $json.url }}'), authentication: 'predefinedCredentialType', nodeCredentialType: 'googleSheetsOAuth2Api',
+    sendBody: true, specifyBody: 'json', jsonBody: expr('{{ JSON.stringify($json.body) }}'), options: { timeout: 20000 } }, credentials: { googleSheetsOAuth2Api: { id: 'd9JzMLg0lUmByTRr', name: 'Google Sheets account' } } },
+  output: [{ spreadsheetId: 'x' }] });
 
 const separar = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Separar escrituras',
   parameters: { mode: 'runOnceForAllItems', jsCode: "// Convierte las escrituras de \"Lógica Bombi\" en peticiones a la API de Google Sheets:\n// una por pestaña para agregar filas y una sola para actualizar celdas.\n// El link del capture todavía no existe: el marcador {{LINK_CAPTURE}} se guarda vacío y\n// \"Completar link\" lo llena después de responder a la app (así Drive nunca la hace esperar).\nconst MARCA = '{{LINK_CAPTURE}}';\nconst out = $('Lógica Bombi').first().json;\nlet sheetId = '';\nfor (const i of $('Leer config').all()) if (i.json.clave === 'sheet_id' && i.json.valor) sheetId = i.json.valor;\nconst base = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values`;\nconst filas = {};\nfor (const e of out.escrituras) if (e.tipo === 'append') (filas[e.hoja] = filas[e.hoja] || []).push(e.fila);\nconst items = Object.entries(filas).map(([hoja, values]) => ({ json: {\n  hoja,\n  url: `${base}/${encodeURIComponent(`'${hoja}'!A1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,\n  body: { values: values.map((r) => r.map((v) => (v === MARCA ? '' : v))) },\n  columnasLink: values.map((r) => r.indexOf(MARCA)),\n} }));\nconst celdas = out.escrituras.filter((e) => e.tipo === 'update' && e.valor !== MARCA);\nif (celdas.length) items.push({ json: { url: `${base}:batchUpdate`, body: {\n  valueInputOption: 'USER_ENTERED', data: celdas.map((e) => ({ range: e.rango, values: [[e.valor]] })),\n} } });\nreturn items;\n" } }, output: [{ url: 'https://x', body: {} }] });
@@ -84,15 +95,17 @@ const nota = sticky('## Bombi · API webapp\nUna sola URL para la app: POST /web
 export default workflow('bombi-api-webapp', 'Bombi · API webapp')
   .add(api).to(config).to(hojas).to(logica)
   .to(paso
-    .onCase(0, hayCapture.onTrue(drive.to(separar)).onFalse(separar))
+    .onCase(0, separar)
     .onCase(1, extraer.to(prepararLectura.to(gemini.to(leyo.onTrue(interpretar).onFalse(respaldo.to(interpretar))))))
     .onCase(2, tasa.to(respTasa.to(responder)))
     .onCase(3, responder))
   .add(separar).to(escribir.to(resultado.to(responder)))
   .add(interpretar).to(responder)
   .add(responder).to(avisos).to(telegram)
+  .add(responder).to(subir.onTrue(prepararSubida.to(drive.to(completar.to(guardarLink)))))
   .add(nota)
-  .group('Escribir en el Sheet', [hayCapture, drive, separar, escribir, resultado], { description: 'Sube el capture a Drive si hay, agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
+  .group('Escribir en el Sheet', [separar, escribir, resultado], { description: 'Agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
+  .group('Capture a Drive', [subir, prepararSubida, drive, completar, guardarLink], { description: 'Después de responder: sube el capture a Drive y completa Link capture. Si Drive tarda o falla, el registro ya está guardado.' })
   .group('Leer capture con IA', [extraer, prepararLectura, gemini, leyo, respaldo, interpretar], { description: 'Gemini lee monto, referencia, fecha, método y banco del capture; si el modelo principal falla, usa el de respaldo.' })
   .group('Tasa a pedido', [tasa, respTasa], { description: 'Ejecuta el workflow Bombi · Tasa BCV y responde la tasa nueva.' })
   .group('Avisos', [avisos, telegram], { description: 'Después de responder, avisa por Telegram a los admins (por ejemplo, usuario nuevo pendiente).' });

@@ -30,14 +30,25 @@ const paso = switchCase({ version: 3.2, config: { name: 'Siguiente paso', parame
   { outputKey: 'tasa', conditions: ${COND('tasa')} }
 ] }, options: { fallbackOutput: 'extra', renameFallbackOutput: 'responder' } } } });
 
-const hayCapture = ifElse({ version: 2.2, config: { name: '¿Hay capture?', parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
-  conditions: [ { leftValue: expr('{{ $json.capture_nombre || "" }}'), operator: { type: 'string', operation: 'notEmpty', singleValue: true }, rightValue: '' } ], combinator: 'and' }, options: {} } } });
+const subir = ifElse({ version: 2.2, config: { name: '¿Subir capture?', parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+  conditions: [ { leftValue: expr("{{ $('Lógica Bombi').first().json.paso === 'escribir' && !!$('Lógica Bombi').first().json.capture_nombre && Number($json.status) < 300 }}"), operator: { type: 'boolean', operation: 'true', singleValue: true }, rightValue: '' } ], combinator: 'and' }, options: {} } } });
+
+const prepararSubida = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Preparar subida',
+  parameters: { mode: 'runOnceForAllItems', jsCode: ${src('preparar-subida.js')} } }, output: [{ capture_nombre: 'V-1' }] });
 
 const drive = node({ type: 'n8n-nodes-base.googleDrive', version: 3, config: { name: 'Subir capture a Drive', onError: 'continueRegularOutput',
   parameters: { resource: 'file', operation: 'upload', inputDataFieldName: 'capture', name: expr('{{ $json.capture_nombre }}.jpg'),
     driveId: { __rl: true, mode: 'list', value: 'My Drive' },
     folderId: { __rl: true, mode: 'id', value: expr("{{ $('Leer config').all().find(i => i.json.clave === 'drive_folder_id' && i.json.valor)?.json.valor || 'root' }}") }, options: {} },
   credentials: { googleDriveOAuth2Api: { id: 'U4mYGuaHO0AXg6kz', name: 'Google Drive account' } } }, output: [{ id: 'abc' }] });
+
+const completar = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Completar link',
+  parameters: { mode: 'runOnceForAllItems', jsCode: ${src('completar-link.js')} } }, output: [{ url: 'https://x', body: {} }] });
+
+const guardarLink = node({ type: 'n8n-nodes-base.httpRequest', version: 4.2, config: { name: 'Guardar link', retryOnFail: true, maxTries: 3, onError: 'continueRegularOutput',
+  parameters: { method: 'POST', url: expr('{{ $json.url }}'), authentication: 'predefinedCredentialType', nodeCredentialType: 'googleSheetsOAuth2Api',
+    sendBody: true, specifyBody: 'json', jsonBody: expr('{{ JSON.stringify($json.body) }}'), options: { timeout: 20000 } }, credentials: ${SHEETS} },
+  output: [{ spreadsheetId: 'x' }] });
 
 const separar = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Separar escrituras',
   parameters: { mode: 'runOnceForAllItems', jsCode: ${src('separar-escrituras.js')} } }, output: [{ url: 'https://x', body: {} }] });
@@ -91,15 +102,17 @@ const nota = sticky('## Bombi · API webapp\\nUna sola URL para la app: POST /we
 export default workflow('bombi-api-webapp', 'Bombi · API webapp')
   .add(api).to(config).to(hojas).to(logica)
   .to(paso
-    .onCase(0, hayCapture.onTrue(drive.to(separar)).onFalse(separar))
+    .onCase(0, separar)
     .onCase(1, extraer.to(prepararLectura.to(gemini.to(leyo.onTrue(interpretar).onFalse(respaldo.to(interpretar))))))
     .onCase(2, tasa.to(respTasa.to(responder)))
     .onCase(3, responder))
   .add(separar).to(escribir.to(resultado.to(responder)))
   .add(interpretar).to(responder)
   .add(responder).to(avisos).to(telegram)
+  .add(responder).to(subir.onTrue(prepararSubida.to(drive.to(completar.to(guardarLink)))))
   .add(nota)
-  .group('Escribir en el Sheet', [hayCapture, drive, separar, escribir, resultado], { description: 'Sube el capture a Drive si hay, agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
+  .group('Escribir en el Sheet', [separar, escribir, resultado], { description: 'Agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
+  .group('Capture a Drive', [subir, prepararSubida, drive, completar, guardarLink], { description: 'Después de responder: sube el capture a Drive y completa Link capture. Si Drive tarda o falla, el registro ya está guardado.' })
   .group('Leer capture con IA', [extraer, prepararLectura, gemini, leyo, respaldo, interpretar], { description: 'Gemini lee monto, referencia, fecha, método y banco del capture; si el modelo principal falla, usa el de respaldo.' })
   .group('Tasa a pedido', [tasa, respTasa], { description: 'Ejecuta el workflow Bombi · Tasa BCV y responde la tasa nueva.' })
   .group('Avisos', [avisos, telegram], { description: 'Después de responder, avisa por Telegram a los admins (por ejemplo, usuario nuevo pendiente).' });
