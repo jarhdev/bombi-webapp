@@ -1,4 +1,4 @@
-import { workflow, node, trigger, sticky, switchCase, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, sticky, switchCase, ifElse, expr } from '@n8n/workflow-sdk';
 
 const api = trigger({ type: 'n8n-nodes-base.webhook', version: 2.1, config: { name: 'API Bombi',
   parameters: { httpMethod: 'POST', path: 'bombi/:ruta', responseMode: 'responseNode', options: {} } },
@@ -9,7 +9,7 @@ const config = node({ type: 'n8n-nodes-base.dataTable', version: 1.1, config: { 
   output: [{ clave: 'sheet_id', valor: 'abc' }] });
 
 const hojas = node({ type: 'n8n-nodes-base.httpRequest', version: 4.2, config: { name: 'Leer hojas', executeOnce: true, retryOnFail: true, maxTries: 3, onError: 'continueRegularOutput',
-  parameters: { url: expr("https://sheets.googleapis.com/v4/spreadsheets/{{ $('Leer config').all().find(i => i.json.clave === 'sheet_id').json.valor }}/values:batchGet?ranges=Usuarios!A%3AJ&ranges=Ventas!A%3AT&ranges=Gastos!A%3AR&ranges='Por%20cobrar'!A%3AR&ranges=Productos!A%3AF&ranges=Tasas!A%3AD&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER"),
+  parameters: { url: expr("https://sheets.googleapis.com/v4/spreadsheets/{{ $('Leer config').all().find(i => i.json.clave === 'sheet_id').json.valor }}/values:batchGet?ranges=Usuarios!A%3AJ&ranges=Ventas!A%3AT&ranges=Gastos!A%3AR&ranges='Por%20cobrar'!A%3AS&ranges=Productos!A%3AF&ranges=Tasas!A%3AD&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER"),
     authentication: 'predefinedCredentialType', nodeCredentialType: 'googleSheetsOAuth2Api', options: { timeout: 20000 } }, credentials: { googleSheetsOAuth2Api: { id: 'd9JzMLg0lUmByTRr', name: 'Google Sheets account' } } },
   output: [{ valueRanges: [] }] });
 
@@ -23,8 +23,17 @@ const paso = switchCase({ version: 3.2, config: { name: 'Siguiente paso', parame
   { outputKey: 'tasa', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' }, conditions: [ { leftValue: expr('{{ $json.paso }}'), operator: { type: 'string', operation: 'equals' }, rightValue: 'tasa' } ], combinator: 'and' } }
 ] }, options: { fallbackOutput: 'extra', renameFallbackOutput: 'responder' } } } });
 
+const hayCapture = ifElse({ version: 2.2, config: { name: '¿Hay capture?', parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+  conditions: [ { leftValue: expr('{{ $json.capture_nombre || "" }}'), operator: { type: 'string', operation: 'notEmpty', singleValue: true }, rightValue: '' } ], combinator: 'and' }, options: {} } } });
+
+const drive = node({ type: 'n8n-nodes-base.googleDrive', version: 3, config: { name: 'Subir capture a Drive', onError: 'continueRegularOutput',
+  parameters: { resource: 'file', operation: 'upload', inputDataFieldName: 'capture', name: expr('{{ $json.capture_nombre }}.jpg'),
+    driveId: { __rl: true, mode: 'list', value: 'My Drive' },
+    folderId: { __rl: true, mode: 'id', value: expr("{{ $('Leer config').all().find(i => i.json.clave === 'drive_folder_id' && i.json.valor)?.json.valor || 'root' }}") }, options: {} },
+  credentials: { googleDriveOAuth2Api: { id: 'U4mYGuaHO0AXg6kz', name: 'Google Drive account' } } }, output: [{ id: 'abc' }] });
+
 const separar = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Separar escrituras',
-  parameters: { mode: 'runOnceForAllItems', jsCode: "// Convierte las escrituras de \"Lógica Bombi\" en peticiones a la API de Google Sheets:\n// una por pestaña para agregar filas y una sola para actualizar celdas.\nconst out = $('Lógica Bombi').first().json;\nlet sheetId = '';\nfor (const i of $('Leer config').all()) if (i.json.clave === 'sheet_id') sheetId = i.json.valor;\nconst base = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values`;\nconst filas = {};\nfor (const e of out.escrituras) if (e.tipo === 'append') (filas[e.hoja] = filas[e.hoja] || []).push(e.fila);\nconst items = Object.entries(filas).map(([hoja, values]) => ({ json: {\n  url: `${base}/${encodeURIComponent(`'${hoja}'!A1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,\n  body: { values },\n} }));\nconst celdas = out.escrituras.filter((e) => e.tipo === 'update');\nif (celdas.length) items.push({ json: { url: `${base}:batchUpdate`, body: {\n  valueInputOption: 'USER_ENTERED', data: celdas.map((e) => ({ range: e.rango, values: [[e.valor]] })),\n} } });\nreturn items;\n" } }, output: [{ url: 'https://x', body: {} }] });
+  parameters: { mode: 'runOnceForAllItems', jsCode: "// Convierte las escrituras de \"Lógica Bombi\" en peticiones a la API de Google Sheets:\n// una por pestaña para agregar filas y una sola para actualizar celdas.\n// Si se subió un capture a Drive, cambia el marcador {{LINK_CAPTURE}} por su link.\nconst out = $('Lógica Bombi').first().json;\nlet sheetId = '';\nfor (const i of $('Leer config').all()) if (i.json.clave === 'sheet_id' && i.json.valor) sheetId = i.json.valor;\nlet link = '';\ntry {\n  const archivo = $('Subir capture a Drive').first().json;\n  if (archivo.id && !archivo.error) link = `https://drive.google.com/file/d/${archivo.id}/view`;\n} catch (e) { link = ''; }\nconst conLink = (v) => (v === '{{LINK_CAPTURE}}' ? link : v);\nconst base = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values`;\nconst filas = {};\nfor (const e of out.escrituras) if (e.tipo === 'append') (filas[e.hoja] = filas[e.hoja] || []).push(e.fila.map(conLink));\nconst items = Object.entries(filas).map(([hoja, values]) => ({ json: {\n  url: `${base}/${encodeURIComponent(`'${hoja}'!A1`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,\n  body: { values },\n} }));\nconst celdas = out.escrituras.filter((e) => e.tipo === 'update');\nif (celdas.length) items.push({ json: { url: `${base}:batchUpdate`, body: {\n  valueInputOption: 'USER_ENTERED', data: celdas.map((e) => ({ range: e.rango, values: [[conLink(e.valor)]] })),\n} } });\nreturn items;\n" } }, output: [{ url: 'https://x', body: {} }] });
 
 const escribir = node({ type: 'n8n-nodes-base.httpRequest', version: 4.2, config: { name: 'Escribir en Sheets', retryOnFail: true, maxTries: 3, onError: 'continueRegularOutput',
   parameters: { method: 'POST', url: expr('{{ $json.url }}'), authentication: 'predefinedCredentialType', nodeCredentialType: 'googleSheetsOAuth2Api',
@@ -70,13 +79,14 @@ const nota = sticky('## Bombi · API webapp\nUna sola URL para la app: POST /web
 export default workflow('bombi-api-webapp', 'Bombi · API webapp')
   .add(api).to(config).to(hojas).to(logica)
   .to(paso
-    .onCase(0, separar.to(escribir.to(resultado.to(responder))))
+    .onCase(0, hayCapture.onTrue(drive.to(separar)).onFalse(separar))
     .onCase(1, extraer.to(prepararLectura.to(gemini.to(interpretar.to(responder)))))
     .onCase(2, tasa.to(respTasa.to(responder)))
     .onCase(3, responder))
+  .add(separar).to(escribir.to(resultado.to(responder)))
   .add(responder).to(avisos).to(telegram)
   .add(nota)
-  .group('Escribir en el Sheet', [separar, escribir, resultado], { description: 'Agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
+  .group('Escribir en el Sheet', [hayCapture, drive, separar, escribir, resultado], { description: 'Sube el capture a Drive si hay, agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
   .group('Leer capture con IA', [extraer, prepararLectura, gemini, interpretar], { description: 'Gemini lee monto, referencia, fecha, método y banco del capture (mismo modelo y credencial que el bot).' })
   .group('Tasa a pedido', [tasa, respTasa], { description: 'Ejecuta el workflow Bombi · Tasa BCV y responde la tasa nueva.' })
   .group('Avisos', [avisos, telegram], { description: 'Después de responder, avisa por Telegram a los admins (por ejemplo, usuario nuevo pendiente).' });

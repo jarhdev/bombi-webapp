@@ -1,7 +1,8 @@
 // ===== Envoltorio del nodo Code "Lógica Bombi" =====
 const wh = $('API Bombi').first();
 const cfg = {};
-for (const i of $('Leer config').all()) cfg[i.json.clave] = i.json.valor;
+// Si una clave está repetida, gana la fila con valor (las vacías se ignoran).
+for (const i of $('Leer config').all()) if (i.json.valor !== '' && i.json.valor != null) cfg[i.json.clave] = i.json.valor;
 const lectura = $('Leer hojas').first().json;
 let body = wh.json.body || {};
 if (typeof body.data === 'string') { try { body = JSON.parse(body.data); } catch (e) { body = {}; } }

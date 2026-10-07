@@ -6,6 +6,8 @@ const METODOS = ['Pago Móvil', 'Transferencia', 'Punto de venta', 'Efectivo Bs'
 const CATEGORIAS = ['Ingredientes', 'Empaques', 'Delivery', 'Servicios', 'Equipos', 'Publicidad', 'Otros'];
 const DIA_MS = 864e5;
 const SESION_DIAS = 30;
+// Marcador que el nodo "Separar escrituras" cambia por el link del capture en Drive (o por vacío si no se pudo subir).
+const LINK_CAPTURE = '{{LINK_CAPTURE}}';
 
 class Fallo extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra; } }
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -228,7 +230,7 @@ function buscarReferencia(h, ref) {
   return g ? { tipo: 'gasto', fecha: g.fecha, monto: g.monto, moneda: g.moneda, cliente: g.concepto } : null;
 }
 function yaProcesado(h, rid) {
-  return !!txt(rid) && [...h.Ventas.filas, ...h.Gastos.filas].some((f) => txt(f['Request id']) === txt(rid));
+  return !!txt(rid) && [...h.Ventas.filas, ...h.Gastos.filas, ...h['Por cobrar'].filas].some((f) => txt(f['Request id']) === txt(rid));
 }
 function nuevoId(t, pref, ahora) {
   const base = `${pref}-${caracas(ahora).compacto}`;
@@ -252,12 +254,13 @@ function registro(ctx, h, res, u) {
     const monto = r2(b.monto);
     if (!(monto > 0)) throw new Fallo(400, 'El monto debe ser mayor que cero.');
     if (!txt(b.cliente)) throw new Fallo(400, 'Escribe la empresa.');
+    if (yaProcesado(h, b.request_id)) return res(200, { ok: true, repetido: true });
     const n = Math.max(0, ...P.filas.map((f) => num(f.Orden))) + 1;
     const entrega = fechaValida(b.fecha_entrega, c.fecha);
     res.escrituras.push({ tipo: 'append', hoja: 'Por cobrar', fila: filaPara(P, {
       Orden: n, 'Fecha entrega': entrega, Cliente: seguro(b.cliente), Productos: seguro(b.productos), Monto: monto, Moneda: 'USD',
       'Fecha esperada pago': fechaCelda(b.fecha_esperada_pago) || viernesSiguiente(entrega), Estado: 'pendiente',
-      'Registrado por': u.nombre, Origen: 'webapp' }) });
+      'Registrado por': u.nombre, Origen: 'webapp', ...(P.enc.includes('Request id') ? { 'Request id': txt(b.request_id) } : {}) }) });
     return res(200, { ok: true, orden: n });
   }
   if (b.tipo !== 'venta' && b.tipo !== 'gasto') throw new Fallo(400, 'Tipo de registro desconocido.');
@@ -269,15 +272,17 @@ function registro(ctx, h, res, u) {
   const comun = { Fecha: fechaValida(b.fecha, c.fecha), Hora: c.hora, Monto: m.monto, Moneda: m.moneda, 'Tasa BCV': m.tasa,
     'Monto USD': m.usd, 'Monto Bs': m.bs, 'Método': b.metodo, Referencia: comoTexto(b.referencia), 'Registrado por': u.nombre,
     Origen: 'webapp', 'Request id': txt(b.request_id) };
-  if (ctx.linkCapture) comun['Link capture'] = ctx.linkCapture;
+  if (ctx.tieneCapture) comun['Link capture'] = LINK_CAPTURE;
   if (b.tipo === 'venta') {
     const id = nuevoId(h.Ventas, 'V', ahora);
+    if (ctx.tieneCapture) res.nombrarCapture(id);
     res.escrituras.push({ tipo: 'append', hoja: 'Ventas', fila: filaPara(h.Ventas, { ID: id, ...comun,
       Producto: seguro(b.productos), Cantidad: num(b.cantidad) || '', Banco: seguro(b.banco), Cliente: seguro(b.cliente) }) });
     return res(200, { ok: true, id });
   }
   if (!CATEGORIAS.includes(b.categoria)) throw new Fallo(400, 'Categoría no válida.');
   const id = nuevoId(h.Gastos, 'G', ahora);
+  if (ctx.tieneCapture) res.nombrarCapture(id);
   res.escrituras.push({ tipo: 'append', hoja: 'Gastos', fila: filaPara(h.Gastos, { ID: id, ...comun,
     Concepto: seguro(b.concepto), 'Categoría': b.categoria, Proveedor: seguro(b.proveedor) }) });
   return res(200, { ok: true, id });
@@ -298,11 +303,11 @@ function cobrar(ctx, h, res, u) {
     'Tasa BCV': m.tasa, 'Monto USD': m.usd, 'Monto Bs': m.bs, 'Método': b.metodo, Banco: seguro(b.banco),
     Referencia: comoTexto(b.referencia), Cliente: seguro(f.Cliente), 'Registrado por': u.nombre, Orden: num(f.Orden),
     Origen: 'webapp', 'Request id': txt(b.request_id) };
-  if (ctx.linkCapture) venta['Link capture'] = ctx.linkCapture;
+  if (ctx.tieneCapture) { venta['Link capture'] = LINK_CAPTURE; res.nombrarCapture(id); }
   res.escrituras.push({ tipo: 'append', hoja: 'Ventas', fila: filaPara(h.Ventas, venta) });
   const cambios = { Estado: 'pagado', 'Fecha pago': fecha, 'Metodo de pago': b.metodo, Referencia: comoTexto(b.referencia),
     'Moneda pago': m.moneda, 'Monto pagado': m.monto, 'Tasa pago': m.tasa, 'Monto pagado USD': m.usd };
-  if (ctx.linkCapture) cambios['Link capture'] = ctx.linkCapture;
+  if (ctx.tieneCapture) cambios['Link capture'] = LINK_CAPTURE;
   for (const [col, valor] of Object.entries(cambios)) res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, col), valor });
   return res(200, { ok: true, id });
 }
@@ -376,6 +381,7 @@ function procesar(ctx) {
   const out = { paso: 'responder', status: 200, respuesta: null, escrituras: [], avisos: [] };
   const res = (status, respuesta) => { out.status = status; out.respuesta = respuesta; return out; };
   res.escrituras = out.escrituras; res.avisos = out.avisos;
+  res.nombrarCapture = (nombre) => { out.capture_nombre = nombre; };
   try {
     if (!txt(ctx.cfg?.token_secret) || txt(ctx.cfg.token_secret).length < 32) throw new Fallo(503, 'Falta configurar token_secret en la tabla bombi_config.');
     if (ctx.errorLectura) throw new Fallo(503, 'No pude leer el Google Sheet. Intenta de nuevo en un momento.');
@@ -403,7 +409,7 @@ function procesar(ctx) {
       default: throw new Fallo(404, 'Ruta desconocida.');
     }
   } catch (e) {
-    out.escrituras.length = 0; out.avisos.length = 0; out.paso = 'responder';
+    out.escrituras.length = 0; out.avisos.length = 0; out.paso = 'responder'; delete out.capture_nombre;
     if (e instanceof Fallo) return res(e.status, { ok: false, error: e.message, ...(e.extra || {}) });
     return res(500, { ok: false, error: `Error interno: ${e.message}` });
   } finally {

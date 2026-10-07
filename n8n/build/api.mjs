@@ -4,8 +4,8 @@ const src = (...fs) => JSON.stringify(fs.map(leer).join('\n'))
 const SHEETS = `{ googleSheetsOAuth2Api: { id: 'd9JzMLg0lUmByTRr', name: 'Google Sheets account' } }`
 const COND = (v) => `{ options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' }, conditions: [ { leftValue: expr('{{ $json.paso }}'), operator: { type: 'string', operation: 'equals' }, rightValue: '${v}' } ], combinator: 'and' }`
 const SHEET_ID = `{{ $('Leer config').all().find(i => i.json.clave === 'sheet_id').json.valor }}`
-const RANGOS = ['Usuarios!A:J', 'Ventas!A:T', 'Gastos!A:R', "'Por cobrar'!A:R", 'Productos!A:F', 'Tasas!A:D'].map((r) => 'ranges=' + encodeURIComponent(r)).join('&')
-const code = `import { workflow, node, trigger, sticky, switchCase, expr } from '@n8n/workflow-sdk';
+const RANGOS = ['Usuarios!A:J', 'Ventas!A:T', 'Gastos!A:R', "'Por cobrar'!A:S", 'Productos!A:F', 'Tasas!A:D'].map((r) => 'ranges=' + encodeURIComponent(r)).join('&')
+const code = `import { workflow, node, trigger, sticky, switchCase, ifElse, expr } from '@n8n/workflow-sdk';
 
 const api = trigger({ type: 'n8n-nodes-base.webhook', version: 2.1, config: { name: 'API Bombi',
   parameters: { httpMethod: 'POST', path: 'bombi/:ruta', responseMode: 'responseNode', options: {} } },
@@ -29,6 +29,15 @@ const paso = switchCase({ version: 3.2, config: { name: 'Siguiente paso', parame
   { outputKey: 'leer capture', conditions: ${COND('capture')} },
   { outputKey: 'tasa', conditions: ${COND('tasa')} }
 ] }, options: { fallbackOutput: 'extra', renameFallbackOutput: 'responder' } } } });
+
+const hayCapture = ifElse({ version: 2.2, config: { name: '¿Hay capture?', parameters: { conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose' },
+  conditions: [ { leftValue: expr('{{ $json.capture_nombre || "" }}'), operator: { type: 'string', operation: 'notEmpty', singleValue: true }, rightValue: '' } ], combinator: 'and' }, options: {} } } });
+
+const drive = node({ type: 'n8n-nodes-base.googleDrive', version: 3, config: { name: 'Subir capture a Drive', onError: 'continueRegularOutput',
+  parameters: { resource: 'file', operation: 'upload', inputDataFieldName: 'capture', name: expr('{{ $json.capture_nombre }}.jpg'),
+    driveId: { __rl: true, mode: 'list', value: 'My Drive' },
+    folderId: { __rl: true, mode: 'id', value: expr("{{ $('Leer config').all().find(i => i.json.clave === 'drive_folder_id' && i.json.valor)?.json.valor || 'root' }}") }, options: {} },
+  credentials: { googleDriveOAuth2Api: { id: 'U4mYGuaHO0AXg6kz', name: 'Google Drive account' } } }, output: [{ id: 'abc' }] });
 
 const separar = node({ type: 'n8n-nodes-base.code', version: 2, config: { name: 'Separar escrituras',
   parameters: { mode: 'runOnceForAllItems', jsCode: ${src('separar-escrituras.js')} } }, output: [{ url: 'https://x', body: {} }] });
@@ -77,13 +86,14 @@ const nota = sticky('## Bombi · API webapp\\nUna sola URL para la app: POST /we
 export default workflow('bombi-api-webapp', 'Bombi · API webapp')
   .add(api).to(config).to(hojas).to(logica)
   .to(paso
-    .onCase(0, separar.to(escribir.to(resultado.to(responder))))
+    .onCase(0, hayCapture.onTrue(drive.to(separar)).onFalse(separar))
     .onCase(1, extraer.to(prepararLectura.to(gemini.to(interpretar.to(responder)))))
     .onCase(2, tasa.to(respTasa.to(responder)))
     .onCase(3, responder))
+  .add(separar).to(escribir.to(resultado.to(responder)))
   .add(responder).to(avisos).to(telegram)
   .add(nota)
-  .group('Escribir en el Sheet', [separar, escribir, resultado], { description: 'Agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
+  .group('Escribir en el Sheet', [hayCapture, drive, separar, escribir, resultado], { description: 'Sube el capture a Drive si hay, agrega filas y actualiza celdas con la API de Google Sheets; si algo falla, la app recibe error.' })
   .group('Leer capture con IA', [extraer, prepararLectura, gemini, interpretar], { description: 'Gemini lee monto, referencia, fecha, método y banco del capture (mismo modelo y credencial que el bot).' })
   .group('Tasa a pedido', [tasa, respTasa], { description: 'Ejecuta el workflow Bombi · Tasa BCV y responde la tasa nueva.' })
   .group('Avisos', [avisos, telegram], { description: 'Después de responder, avisa por Telegram a los admins (por ejemplo, usuario nuevo pendiente).' });

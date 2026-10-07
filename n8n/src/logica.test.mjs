@@ -18,8 +18,8 @@ function conPin(lectura, nombre, pin) {
   fila[3] = hashPin('sal1', pin); fila[4] = 'sal1'
   return lectura
 }
-function llamar(ruta, body, { token, lectura = fixture(), ahora = AHORA } = {}) {
-  return JSON.parse(JSON.stringify(procesar({ ruta, body, headers: token ? { authorization: `Bearer ${token}` } : {}, cfg, lectura, ahora })))
+function llamar(ruta, body, { token, lectura = fixture(), ahora = AHORA, tieneCapture = false } = {}) {
+  return JSON.parse(JSON.stringify(procesar({ ruta, body, headers: token ? { authorization: `Bearer ${token}` } : {}, cfg, lectura, ahora, tieneCapture })))
 }
 function login(nombre = 'Jose') {
   const lectura = conPin(fixture(), nombre, '1234')
@@ -162,4 +162,28 @@ test('productos y tasa', () => {
   assert.equal(g.escrituras.length, 2)
   assert.equal(llamar('tasa', {}, { token: t }).respuesta.fuente, 'última venta')
   assert.equal(llamar('tasa-actualizar', {}, { token: t }).paso, 'tasa')
+})
+
+test('orden por cobrar con request id no se duplica', () => {
+  const t = login()
+  const lectura = conPin(fixture(), 'Jose', '1234')
+  const pc = lectura.valueRanges.find((v) => v.range.startsWith("'Por cobrar'")).values
+  pc[0].push('Request id')
+  const o = { tipo: 'cobrar', cliente: 'Clínica', productos: '1x Brownie', monto: 5, request_id: 'ord-1' }
+  const r = llamar('registro', o, { token: t, lectura })
+  assert.equal(r.escrituras[0].fila.at(-1), 'ord-1')
+  pc.push([3, 46301, 'Clínica', '1x Brownie', 5, 'USD', 46304, 'pendiente', '', '', '', 'Jose', 'webapp', '', '', '', '', '', 'ord-1'])
+  const r2 = llamar('registro', o, { token: t, lectura })
+  assert.equal(r2.respuesta.repetido, true); assert.equal(r2.escrituras.length, 0)
+  // Sin la columna, la orden se guarda igual (sin Request id).
+  assert.equal(llamar('registro', o, { token: t }).escrituras[0].fila.length, 13)
+})
+
+test('capture: marca el link y nombra el archivo con el ID', () => {
+  const t = login()
+  const b = { tipo: 'gasto', monto: 20, moneda: 'USD', metodo: 'Efectivo USD', categoria: 'Empaques', concepto: 'Bolsas', request_id: 'g-cap' }
+  const r = llamar('registro', b, { token: t, tieneCapture: true })
+  assert.equal(r.paso, 'escribir'); assert.match(r.capture_nombre, /^G-/)
+  assert.ok(r.escrituras[0].fila.includes('{{LINK_CAPTURE}}'))
+  assert.equal(llamar('registro', b, { token: t }).capture_nombre, undefined)
 })
