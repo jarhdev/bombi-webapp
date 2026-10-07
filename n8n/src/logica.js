@@ -217,12 +217,19 @@ function resumen(ctx, h, res) {
   const gastos = r2(G.filter(enRango).reduce((s, x) => s + x.monto_usd, 0));
   const pend = O.filter((o) => o.estado === 'pendiente');
   const bot = (x) => (x.origen === 'webapp' ? x.quien : `${x.quien} (bot)`);
+  // Últimos registros: por el momento en que se registraron (sale del ID V-/G-aaMMdd-HHmmss),
+  // no por la fecha del pago; así un capture de ayer registrado hoy aparece arriba.
+  const alta = (x) => {
+    const m = x.id.match(/^[VG]-(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
+    const fecha = m ? `20${m[1]}-${m[2]}-${m[3]}` : x.fecha;
+    return { registrado: fecha, k: `${m ? `${fecha} ${m[4]}:${m[5]}:${m[6]}` : `${x.fecha} ${x.hora}:00`} ${String(x.fila).padStart(6, '0')}` };
+  };
   const movs = [
-    ...V.map((v) => ({ id: v.id, tipo: 'venta', fecha: v.fecha, k: `${v.fecha} ${v.hora} ${String(v.fila).padStart(6, '0')}`, anulado: v.anulado,
+    ...V.map((v) => ({ id: v.id, tipo: 'venta', fecha: v.fecha, ...alta(v), anulado: v.anulado,
       titulo: v.orden ? `Venta · Orden #${v.orden}` : `Venta · ${v.metodo || 'sin método'}`, detalle: [v.cliente || v.producto, bot(v)].filter(Boolean).join(' · '), monto_usd: v.monto_usd })),
-    ...G.map((g) => ({ id: g.id, tipo: 'gasto', fecha: g.fecha, k: `${g.fecha} ${g.hora} ${String(g.fila).padStart(6, '0')}`, anulado: g.anulado,
+    ...G.map((g) => ({ id: g.id, tipo: 'gasto', fecha: g.fecha, ...alta(g), anulado: g.anulado,
       titulo: `Gasto · ${g.categoria || 'Otros'}`, detalle: [g.concepto, bot(g)].filter(Boolean).join(' · '), monto_usd: g.monto_usd })),
-    ...O.map((o) => ({ id: `o${o.orden}`, tipo: 'cobrar', fecha: o.fecha_entrega, k: `${o.fecha_entrega} 00:00 ${String(o.fila).padStart(6, '0')}`, anulado: o.estado === 'anulada',
+    ...O.map((o) => ({ id: `o${o.orden}`, tipo: 'cobrar', fecha: o.fecha_entrega, registrado: o.fecha_entrega, k: `${o.fecha_entrega} 00:00:00 ${String(o.fila).padStart(6, '0')}`, anulado: o.estado === 'anulada',
       titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : o.pagado_usd > 0 ? `Abonado $${o.pagado_usd.toFixed(2)} · faltan $${o.saldo_usd.toFixed(2)}` : 'Pendiente de cobro', monto_usd: o.monto_usd })),
   ].sort((a, b) => b.k.localeCompare(a.k)).slice(0, 5).map(({ k, ...m }) => m);
   return res(200, { desde, hasta, ventas_usd: ventas, gastos_usd: gastos, ganancia_usd: r2(ventas - gastos),

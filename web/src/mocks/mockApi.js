@@ -137,6 +137,8 @@ export const mockApi = {
         monto_usd: toUsd(o.monto, o.moneda, ultimaTasa().tasa),
       })),
     ].sort((a, b) => (b.creado || '').localeCompare(a.creado || ''))
+      // Fecha en que se registró (puede ser distinta a la del pago, p. ej. un capture de ayer).
+      .map((m) => ({ ...m, registrado: m.creado ? hoyISO(new Date(m.creado)) : m.fecha }))
     return {
       desde, hasta,
       ventas_usd: ventas, gastos_usd: gastos, ganancia_usd: round2(ventas - gastos),

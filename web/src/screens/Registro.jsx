@@ -5,7 +5,7 @@ import CaptureField from '../components/CaptureField.jsx'
 import ProductPicker from '../components/ProductPicker.jsx'
 import { api } from '../api/index.js'
 import { formatBs, formatMonto, formatUsd, montoInput, parseMonto, round2, toUsd } from '../lib/format.js'
-import { fechaCorta, hoyISO, viernesSiguiente } from '../lib/dates.js'
+import { avisoFechaPago, fechaCorta, hoyISO, viernesSiguiente } from '../lib/dates.js'
 import { textoProductos, totalProductos } from '../lib/productos.js'
 import { CATEGORIAS_GASTO, METODOS, METODOS_CON_BANCO, MONEDA_POR_METODO, MONEDAS, OPCIONES_MONEDA } from '../lib/constantes.js'
 import { uid } from '../lib/uid.js'
@@ -222,6 +222,7 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
           <label className="field">
             Fecha
             <input className={aiCls('fecha')} type="date" value={f.fecha} max={hoyISO()} onChange={(e) => set({ fecha: e.target.value })} />
+            {avisoFechaPago(f.fecha) && <span className="hint accent" role="status">{avisoFechaPago(f.fecha)}</span>}
           </label>
         )}
 

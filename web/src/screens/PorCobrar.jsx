@@ -4,7 +4,7 @@ import { Chips, Segmented, Sheet, Spinner, TopBar } from '../components/ui.jsx'
 import CaptureField from '../components/CaptureField.jsx'
 import { api } from '../api/index.js'
 import { formatBs, formatMonto, formatUsd, montoInput, parseMonto, round2, toUsd } from '../lib/format.js'
-import { fechaCorta, hoyISO, nombreDia } from '../lib/dates.js'
+import { avisoFechaPago, fechaCorta, hoyISO, nombreDia } from '../lib/dates.js'
 import { METODOS, METODOS_CON_BANCO, MONEDA_POR_METODO, MONEDAS, OPCIONES_MONEDA } from '../lib/constantes.js'
 import { uid } from '../lib/uid.js'
 import { vibrar } from '../telegram/tg.js'
@@ -247,6 +247,7 @@ function PagoSheet({ orden, onClose, onDone }) {
           <input className="input" type="date" value={fecha} max={hoyISO()} onChange={(e) => setFecha(e.target.value)} />
         </label>
       </div>
+      {avisoFechaPago(fecha) && <div className="notice warn" role="status">{avisoFechaPago(fecha)}</div>}
 
       {error && <div className="notice warn" role="alert">{error}</div>}
 

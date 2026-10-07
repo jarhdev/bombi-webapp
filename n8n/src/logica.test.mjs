@@ -223,3 +223,15 @@ test('abonos parciales: la orden sigue pendiente hasta cubrir el monto', () => {
   assert.ok(an.escrituras.some((e) => /H\d+$/.test(e.rango) && e.valor === 'pendiente'))
   assert.ok(an.escrituras.some((e) => /Q\d+$/.test(e.rango) && e.valor === 10))
 })
+
+test('últimos registros: por momento de registro, con la fecha del pago aparte', () => {
+  const t = login()
+  const lectura = conPin(fixture(), 'Jose', '1234')
+  const ventas = lectura.valueRanges.find((v) => v.range.startsWith('Ventas')).values
+  // Pago del 6 de octubre registrado el 7 a las 14:02 (caso Kimberly).
+  const r = Array(20).fill(''); Object.assign(r, { 0: 'V-261007-140245', 1: 46301, 2: 0.58, 5: 17340, 6: 'Bs', 8: 19.88, 14: 'Jose', 16: 'webapp' })
+  ventas.push(r)
+  const res = llamar('resumen', { periodo: 'hoy' }, { token: t, lectura }).respuesta
+  assert.equal(res.ultimos[0].id, 'V-261007-140245')
+  assert.equal(res.ultimos[0].fecha, '2026-10-06'); assert.equal(res.ultimos[0].registrado, '2026-10-07')
+})

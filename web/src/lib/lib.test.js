@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { formatMonto, parseMonto, toUsd } from './format.js'
-import { viernesSiguiente, rangoPeriodo, hoyISO } from './dates.js'
+import { viernesSiguiente, rangoPeriodo, hoyISO, avisoFechaPago } from './dates.js'
 import { textoProductos, totalProductos, agruparCatalogo } from './productos.js'
 
 test('formato de montos', () => {
@@ -58,4 +58,10 @@ test('texto y total de productos', () => {
   const g = agruparCatalogo(prods)
   assert.equal(g.ny[0].variantes[0].presentacion, '100g')
   assert.equal(g.otros.length, 1)
+})
+
+test('aviso de fecha de pago distinta a hoy', () => {
+  assert.equal(avisoFechaPago('2026-10-07', '2026-10-07'), null)
+  assert.match(avisoFechaPago('2026-10-06', '2026-10-07'), /de ayer \(6 oct\)/)
+  assert.match(avisoFechaPago('2026-10-02', '2026-10-07'), /del viernes 2 oct/)
 })

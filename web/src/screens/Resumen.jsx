@@ -99,7 +99,7 @@ export default function Resumen({ usuario, go, notify }) {
                 <span className={`dot ${m.tipo}`} aria-hidden="true" />
                 <span className="txt">
                   <strong>{m.titulo}</strong>
-                  <span>{m.anulado ? 'Anulado · ' : ''}{fechaRelativa(m.fecha)}{m.detalle ? ` · ${m.detalle}` : ''}</span>
+                  <span>{m.anulado ? 'Anulado · ' : ''}{fechaRelativa(m.registrado || m.fecha)}{m.registrado && m.registrado !== m.fecha ? ` · pago del ${fechaCorta(m.fecha)}` : ''}{m.detalle ? ` · ${m.detalle}` : ''}</span>
                 </span>
                 <span className={`amt${m.tipo === 'gasto' ? ' neg' : ''}`}>
                   {m.tipo === 'venta' ? '+' : m.tipo === 'gasto' ? '−' : ''}{formatUsd(m.monto_usd)}

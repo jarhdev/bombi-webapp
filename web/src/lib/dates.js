@@ -62,3 +62,10 @@ export function fechaRelativa(iso, hoy = hoyISO()) {
   if (iso === addDays(hoy, -1)) return 'Ayer'
   return fechaCorta(iso)
 }
+
+// Aviso cuando la fecha del pago no es hoy (p. ej. un capture de ayer que se registra hoy).
+export function avisoFechaPago(iso, hoy = hoyISO()) {
+  if (!iso || iso === hoy) return null
+  const cuando = iso === addDays(hoy, -1) ? `de ayer (${fechaCorta(iso)})` : `del ${nombreDia(iso)} ${fechaCorta(iso)}`
+  return `Este pago es ${cuando}, no de hoy: se contará en ese día. ¿Es correcto?`
+}
