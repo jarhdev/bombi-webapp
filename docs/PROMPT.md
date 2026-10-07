@@ -84,9 +84,9 @@ El modo demo (`web/src/mocks/mockApi.js`) implementa exactamente este contrato y
 
 1. **Respaldo** ✅: export del bot en `n8n/backup/` y columnas revisadas (ver `docs/FASE1.md`).
 2. **Frontend con datos falsos** ✅.
-3. n8n: auth + usuarios + webhooks + Google Sheets (sin IA). Probar el bot.
-4. Captures con Gemini + Drive. Probar el bot.
+3. **n8n** ✅: workflows `Bombi · API webapp` y `Bombi · Tasa BCV` activos (ver `n8n/README.md`). Falta: prueba del bot con las columnas nuevas.
+4. **Captures con Gemini + Drive** 🟡: implementado; falta la prueba con un capture real (lectura de Gemini y archivo en la carpeta `Bombi-webapp-captures`).
 5. Botón de la Mini App en BotFather; prueba con usuarios reales.
-6. PWA + deploy en Netlify + guía final.
+6. **PWA + deploy en Netlify** 🟡: publicada en https://bombi-control.netlify.app (se publica sola desde la rama). Falta la guía final.
 
 El resto del prompt original (contexto, catálogo, pantallas, diseño visual) sigue vigente.
