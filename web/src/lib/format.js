@@ -5,13 +5,13 @@ function grouped(n) {
   return `${ent.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${dec}`
 }
 
-export function formatMonto(n, moneda = '$') {
+export function formatMonto(n, moneda = 'USD') {
   const v = Number(n) || 0
   const sign = v < 0 ? '−' : ''
   return moneda === 'Bs' ? `${sign}Bs. ${grouped(v)}` : `${sign}$${grouped(v)}`
 }
 
-export const formatUsd = (n) => formatMonto(n, '$')
+export const formatUsd = (n) => formatMonto(n, 'USD')
 export const formatBs = (n) => formatMonto(n, 'Bs')
 
 // Convierte lo que escribe la persona ("1.234,56", "1234.56", "12,5") a número.
@@ -41,7 +41,7 @@ export function montoInput(n) {
 }
 
 export function toUsd(monto, moneda, tasa) {
-  if (moneda === '$') return round2(monto)
+  if (moneda !== 'Bs') return round2(monto)
   return tasa > 0 ? round2(monto / tasa) : 0
 }
 

@@ -7,7 +7,7 @@ import { round2, toUsd } from '../lib/format.js'
 import { ApiError } from '../api/errors.js'
 import { getToken } from '../api/session.js'
 
-const KEY = 'bombi-mock-db-v1'
+const KEY = 'bombi-mock-db-v2'
 const vistos = new Set() // request_id ya procesados (idempotencia)
 
 function load() {
@@ -47,6 +47,12 @@ function ultimaTasa() {
   return t[t.length - 1]
 }
 
+// Las órdenes del bot pueden estar en Bs: para el total se convierten con la tasa de hoy.
+function totalOrdenesUsd(ordenes) {
+  const t = ultimaTasa().tasa
+  return round2(ordenes.reduce((s, o) => s + toUsd(o.monto, o.moneda, t), 0))
+}
+
 function idempotente(req) {
   if (!req.request_id) return false
   if (vistos.has(req.request_id)) return true
@@ -60,7 +66,7 @@ function refDuplicada(referencia, excluirId) {
   const v = db().ventas.find((x) => !x.anulado && x.id !== excluirId && String(x.referencia).trim() === ref)
   if (v) return { tipo: 'venta', fecha: v.fecha, monto: v.monto, moneda: v.moneda, cliente: v.cliente }
   const g = db().gastos.find((x) => !x.anulado && String(x.referencia).trim() === ref)
-  if (g) return { tipo: 'gasto', fecha: g.fecha, monto: g.monto, moneda: g.moneda, cliente: g.descripcion }
+  if (g) return { tipo: 'gasto', fecha: g.fecha, monto: g.monto, moneda: g.moneda, cliente: g.concepto }
   return null
 }
 
@@ -108,24 +114,24 @@ export const mockApi = {
       ...db().ventas.map((v) => ({
         id: v.id, tipo: 'venta', fecha: v.fecha, creado: v.creado, anulado: v.anulado,
         titulo: v.orden ? `Venta · Orden #${v.orden}` : `Venta · ${v.metodo}`,
-        detalle: [v.cliente, v.origen === 'bot' ? 'por el bot' : v.registrado_por].filter(Boolean).join(' · '),
+        detalle: [v.cliente || v.productos, `${v.registrado_por}${v.origen === 'bot' ? ' (bot)' : ''}`].filter(Boolean).join(' · '),
         monto_usd: v.monto_usd,
       })),
       ...db().gastos.map((g) => ({
         id: g.id, tipo: 'gasto', fecha: g.fecha, creado: g.creado, anulado: g.anulado,
-        titulo: `Gasto · ${g.categoria}`, detalle: [g.descripcion, g.registrado_por].filter(Boolean).join(' · '),
+        titulo: `Gasto · ${g.categoria}`, detalle: [g.concepto, g.registrado_por].filter(Boolean).join(' · '),
         monto_usd: g.monto_usd,
       })),
       ...db().porCobrar.map((o) => ({
         id: `o${o.orden}`, tipo: 'cobrar', fecha: o.fecha_entrega, creado: o.creado, anulado: o.estado === 'anulada',
         titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : 'Pendiente de cobro',
-        monto_usd: o.monto,
+        monto_usd: toUsd(o.monto, o.moneda, ultimaTasa().tasa),
       })),
     ].sort((a, b) => (b.creado || '').localeCompare(a.creado || ''))
     return {
       desde, hasta,
       ventas_usd: ventas, gastos_usd: gastos, ganancia_usd: round2(ventas - gastos),
-      por_cobrar: { cantidad: pend.length, total_usd: round2(pend.reduce((s, o) => s + o.monto, 0)) },
+      por_cobrar: { cantidad: pend.length, total_usd: totalOrdenesUsd(pend) },
       ultimos: movimientos.slice(0, 5),
       tasa: ultimaTasa(),
     }
@@ -148,7 +154,7 @@ export const mockApi = {
     usuarioActual()
     // Simula la respuesta de Gemini.
     const ref = String(Math.floor(100000 + Math.random() * 899999))
-    return { monto: 4600, moneda: 'Bs', referencia: ref, fecha: hoyISO(), metodo: 'Pago móvil', banco: 'Banesco' }
+    return { monto: 4600, moneda: 'Bs', referencia: ref, fecha: hoyISO(), metodo: 'Pago Móvil', banco: 'Banesco' }
   },
 
   async registrar(req) {
@@ -163,22 +169,23 @@ export const mockApi = {
         throw new ApiError('Esa referencia ya está registrada.', 409, { duplicado: dup })
       }
     }
-    const base = { fecha: req.fecha, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, referencia: req.referencia || '', registrado_por: u.nombre, anulado: false, creado: new Date().toISOString() }
+    const id = (req.tipo === 'gasto' ? 'G-' : 'V-') + new Date().toISOString().replace(/\D/g, '').slice(2, 8) + '-' + String(++d.seq).padStart(6, '0')
+    const base = { id, fecha: req.fecha, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, referencia: req.referencia || '', registrado_por: u.nombre, anulado: false, creado: new Date().toISOString() }
     if (req.tipo === 'venta') {
-      const v = { id: nextId('v'), ...base, cliente: req.cliente, productos: req.productos, origen: 'webapp', orden: '', capture: req.capture ? '(capture de prueba)' : '' }
+      const v = { ...base, cliente: req.cliente, productos: req.productos, cantidad: req.cantidad, banco: req.banco, origen: 'webapp', orden: '', capture: req.capture ? '(capture de prueba)' : '' }
       d.ventas.push(v)
       save()
       return { ok: true, id: v.id }
     }
     if (req.tipo === 'gasto') {
-      const g = { id: nextId('g'), ...base, categoria: req.categoria, descripcion: req.descripcion, capture: req.capture ? '(capture de prueba)' : '' }
+      const g = { ...base, categoria: req.categoria, concepto: req.concepto, proveedor: req.proveedor, capture: req.capture ? '(capture de prueba)' : '' }
       d.gastos.push(g)
       save()
       return { ok: true, id: g.id }
     }
     if (req.tipo === 'cobrar') {
       const orden = Math.max(0, ...d.porCobrar.map((o) => o.orden)) + 1
-      d.porCobrar.push({ orden, fecha_entrega: req.fecha_entrega, cliente: req.cliente, productos: req.productos, monto: req.monto, moneda: '$', fecha_esperada_pago: req.fecha_esperada_pago, estado: 'pendiente', fecha_pago: '', referencia: '', registrado_por: u.nombre, creado: new Date().toISOString() })
+      d.porCobrar.push({ orden, fecha_entrega: req.fecha_entrega, cliente: req.cliente, productos: req.productos, monto: req.monto, moneda: 'USD', fecha_esperada_pago: req.fecha_esperada_pago, estado: 'pendiente', fecha_pago: '', referencia: '', registrado_por: u.nombre, creado: new Date().toISOString() })
       save()
       return { ok: true, orden }
     }
@@ -190,7 +197,7 @@ export const mockApi = {
     usuarioActual()
     const ordenes = db().porCobrar.filter((o) => o.estado === 'pendiente').sort((a, b) => a.orden - b.orden)
     const proximo = Math.max(0, ...db().porCobrar.map((o) => o.orden)) + 1
-    return { ordenes, total_usd: round2(ordenes.reduce((s, o) => s + o.monto, 0)), proximo_numero: proximo }
+    return { ordenes, total_usd: totalOrdenesUsd(ordenes), hay_bs: ordenes.some((o) => o.moneda === 'Bs'), proximo_numero: proximo }
   },
 
   async cobrar(req) {
@@ -214,7 +221,8 @@ export const mockApi = {
     o.tasa_pago = req.tasa
     o.monto_pagado = req.monto
     o.moneda_pago = req.moneda
-    d.ventas.push({ id: nextId('v'), fecha: req.fecha, cliente: o.cliente, productos: o.productos, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, referencia: req.referencia || '', origen: 'webapp', registrado_por: u.nombre, orden: o.orden, anulado: false, creado: new Date().toISOString(), capture: req.capture ? '(capture de prueba)' : '' })
+    o.metodo_pago = req.metodo
+    d.ventas.push({ id: nextId('V-'), fecha: req.fecha, cliente: o.cliente, productos: o.productos, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, banco: req.banco || '', referencia: req.referencia || '', origen: 'webapp', registrado_por: u.nombre, orden: o.orden, anulado: false, creado: new Date().toISOString(), capture: req.capture ? '(capture de prueba)' : '' })
     save()
     return { ok: true }
   },

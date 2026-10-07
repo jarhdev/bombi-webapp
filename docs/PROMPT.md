@@ -30,23 +30,34 @@ Versión revisada del prompt original (`docs/prompt-original.md`) con las decisi
 - **Frontend:** React + Vite, CSS propio con variables y `vite-plugin-pwa`.
 - **Cobro con monto distinto:** al cobrar, la app compara el monto pagado (convertido a $) con la orden y avisa si no coincide.
 
-## Columnas del Google Sheets
+## Columnas del Google Sheets (archivo `Bombi_Control_Ventas`)
 
-Regla: las columnas existentes no se tocan; lo nuevo va **al final**.
+Revisadas el 7 oct 2026 con el export del bot y capturas de la hoja. Regla: las columnas existentes no se tocan; lo nuevo va **al final**. Las columnas que el bot no conoce quedan vacías en sus filas (el bot guarda con "Map automatically" e ignora lo que sobra), así que agregarlas no lo rompe.
 
-**Por cobrar** (columnas actuales, creadas por el bot): `Orden`, `Fecha entrega`, `Cliente`, `Productos`, `Monto`, `Moneda`, `Fecha esperada pago`, `Estado`, `Fecha pago`, `Referencia`.
-Columnas nuevas al final: `Registrado por`, `Origen`, `Moneda pago`, `Monto pagado`, `Tasa pago`, `Monto pagado $`, `Link capture`.
-Valores de `Estado`: `pendiente`, `pagado` (los mismos del bot) y `anulada`.
+**Valores compartidos con el bot** (la app usa exactamente estos):
+- Moneda: `Bs` o `USD`.
+- Método: `Pago Móvil`, `Transferencia`, `Punto de venta`, `Efectivo Bs`, `Efectivo USD`, `Zelle`, `Binance`.
+- Categoría de gasto: `Ingredientes`, `Empaques`, `Delivery`, `Servicios`, `Equipos`, `Publicidad`, `Otros`.
+- ID: `V-yyMMdd-HHmmss` (ventas) y `G-yyMMdd-HHmmss` (gastos), en hora de Caracas.
+- Referencia: se guarda con apóstrofo delante (`'0627…`) para que la hoja no borre los ceros a la izquierda.
 
-**Ventas** (pendiente de revisar con el export del bot). Columnas nuevas al final si faltan: `Origen` (bot/webapp), `Registrado por`, `N° orden`, `Link capture`, `Moneda`, `Tasa`, `Monto $`, `Anulado`, `Request id`.
+**Ventas** (actuales): `ID`, `Fecha`, `Hora`, `Producto`, `Cantidad`, `Monto`, `Moneda`, `Tasa BCV`, `Monto USD`, `Monto Bs`, `Método`, `Banco`, `Referencia`, `Cliente`, `Registrado por`.
+Nuevas al final: `Orden`, `Origen` (bot/webapp), `Link capture`, `Anulado`, `Request id`.
+La app escribe en `Producto` el texto legible (`2x NY Nutella 160g, 1x Brownie 150g`) y en `Cantidad` el total de unidades.
 
-**Gastos** (nueva): `Fecha`, `Categoría`, `Descripción`, `Monto`, `Moneda`, `Tasa`, `Monto $`, `Método de pago`, `Referencia`, `Link capture`, `Registrado por`, `Anulado`, `Request id`.
+**Gastos** (actuales): `ID`, `Fecha`, `Hora`, `Concepto`, `Categoría`, `Monto`, `Moneda`, `Tasa BCV`, `Monto USD`, `Monto Bs`, `Método`, `Proveedor`, `Referencia`, `Registrado por`.
+Nuevas al final: `Origen`, `Link capture`, `Anulado`, `Request id`.
 
-**Productos** (nueva): `id`, `Nombre`, `Categoría`, `Presentación`, `Precio $`, `Activo` (sí/no).
+**Por cobrar** (actuales): `Orden`, `Fecha entrega`, `Cliente`, `Productos`, `Monto`, `Moneda`, `Fecha esperada pago`, `Estado`, `Fecha pago`, `Metodo de pago`, `Referencia`.
+Nuevas al final: `Registrado por`, `Origen`, `Moneda pago`, `Monto pagado`, `Tasa pago`, `Monto pagado USD`, `Link capture`.
+`Estado`: `pendiente`, `pagado` (los del bot) y `anulada`. Las órdenes de la app van en `USD`; las del bot hoy se crean en `Bs` y la app las acepta igual.
 
-**Usuarios** (nueva): `id`, `nombre`, `telegram_id`, `pin_hash`, `pin_sal`, `rol` (admin/usuario), `estado` (activo/pendiente/inactivo), `fecha_creacion`, `intentos_fallidos`, `bloqueado_hasta`.
+**Pestañas del bot que la app no toca:** `Resumen`, `Pendientes` (cola de confirmación del bot), `Bot` (totales para /resumen), `Listas`.
 
-**Tasas** (nueva): `Fecha valor`, `Tasa`, `Fuente`, `Consultada` (fecha y hora). No se duplica si la tasa y la fecha valor no cambian.
+**Pestañas nuevas:**
+- **Productos:** `id`, `Nombre`, `Categoría`, `Presentación`, `Precio USD`, `Activo` (sí/no).
+- **Usuarios:** `id`, `nombre`, `telegram_id`, `pin_hash`, `pin_sal`, `rol` (admin/usuario), `estado` (activo/pendiente/inactivo), `fecha_creacion`, `intentos_fallidos`, `bloqueado_hasta`.
+- **Tasas:** `Fecha valor`, `Tasa`, `Fuente`, `Consultada`. No se duplica si no cambian la tasa ni la fecha valor.
 
 ## Contrato de los endpoints (n8n)
 
@@ -70,8 +81,8 @@ El modo demo (`web/src/mocks/mockApi.js`) implementa exactamente este contrato y
 
 ## Fases
 
-1. **Respaldo** (lo haces tú): exportar los workflows actuales a `n8n/backup/` y pasar los encabezados de Ventas.
-2. **Frontend con datos falsos** ✅ (este commit).
+1. **Respaldo** ✅: export del bot en `n8n/backup/` y columnas revisadas (ver `docs/FASE1.md`).
+2. **Frontend con datos falsos** ✅.
 3. n8n: auth + usuarios + webhooks + Google Sheets (sin IA). Probar el bot.
 4. Captures con Gemini + Drive. Probar el bot.
 5. Botón de la Mini App en BotFather; prueba con usuarios reales.

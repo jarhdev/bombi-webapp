@@ -7,7 +7,7 @@ import { api } from '../api/index.js'
 import { formatBs, formatMonto, formatUsd, montoInput, parseMonto, round2, toUsd } from '../lib/format.js'
 import { fechaCorta, hoyISO, viernesSiguiente } from '../lib/dates.js'
 import { textoProductos, totalProductos } from '../lib/productos.js'
-import { CATEGORIAS_GASTO, METODOS, MONEDA_POR_METODO, MONEDAS } from '../lib/constantes.js'
+import { CATEGORIAS_GASTO, METODOS, METODOS_CON_BANCO, MONEDA_POR_METODO, MONEDAS, OPCIONES_MONEDA } from '../lib/constantes.js'
 import { uid } from '../lib/uid.js'
 import { vibrar } from '../telegram/tg.js'
 
@@ -27,8 +27,10 @@ const vacio = () => ({
   fechaCobro: viernesSiguiente(hoyISO()),
   cliente: '',
   categoria: '',
-  descripcion: '',
-  metodo: 'Pago móvil',
+  concepto: '',
+  proveedor: '',
+  metodo: 'Pago Móvil',
+  banco: '',
   referencia: '',
   cantidades: {},
   ia: {},
@@ -60,12 +62,13 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
   }, [tipo])
 
   const esCobrar = tipo === 'cobrar'
-  const moneda = esCobrar ? '$' : f.moneda
+  const moneda = esCobrar ? 'USD' : f.moneda
   const tasa = editTasa ? parseMonto(tasaManual) : tasaDia?.tasa || 0
   const totalUsd = useMemo(() => totalProductos(f.cantidades, productos), [f.cantidades, productos])
+  const cantidadTotal = Object.values(f.cantidades).reduce((s, n) => s + n, 0)
 
   // El monto se calcula solo con el catálogo hasta que la persona lo edita (o lo llena la IA).
-  const montoAuto = moneda === '$' ? totalUsd : round2(totalUsd * tasa)
+  const montoAuto = moneda === 'USD' ? totalUsd : round2(totalUsd * tasa)
   const montoTexto = f.montoManual ? f.monto : totalUsd > 0 ? montoInput(montoAuto) : ''
   const montoNum = parseMonto(montoTexto)
   const montoUsd = toUsd(montoNum, moneda, tasa)
@@ -82,6 +85,7 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
     if (d.referencia) { patch.referencia = String(d.referencia); patch.ia.referencia = true }
     if (d.fecha && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha)) { patch.fecha = d.fecha; patch.ia.fecha = true }
     if (d.metodo && METODOS.includes(d.metodo)) { patch.metodo = d.metodo; patch.ia.metodo = true }
+    if (d.banco) { patch.banco = d.banco; patch.ia.banco = true }
     set(patch)
     vibrar('light')
   }
@@ -109,13 +113,16 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
     const req = esCobrar
       ? {
           tipo, request_id: requestId.current, cliente: f.cliente.trim(), productos: productosTxt,
-          monto: montoNum, moneda: '$', fecha_entrega: f.fecha, fecha_esperada_pago: f.fechaCobro,
+          monto: montoNum, moneda: 'USD', fecha_entrega: f.fecha, fecha_esperada_pago: f.fechaCobro,
         }
       : {
           tipo, request_id: requestId.current, fecha: f.fecha, monto: montoNum, moneda, tasa: moneda === 'Bs' ? tasa : tasaDia?.tasa || 0,
-          tasa_editada: editTasa, monto_usd: montoUsd, metodo: f.metodo, referencia: f.referencia.trim(),
+          tasa_editada: editTasa, monto_usd: montoUsd, monto_bs: moneda === 'Bs' ? montoNum : round2(montoNum * tasa),
+          metodo: f.metodo, referencia: f.referencia.trim(),
           capture: f.capture?.blob || null, confirmar_duplicado: confirmarDuplicado,
-          ...(tipo === 'venta' ? { cliente: f.cliente.trim(), productos: productosTxt } : { categoria: f.categoria, descripcion: f.descripcion.trim() }),
+          ...(tipo === 'venta'
+            ? { cliente: f.cliente.trim(), productos: productosTxt, cantidad: cantidadTotal, banco: f.banco.trim() }
+            : { categoria: f.categoria, concepto: f.concepto.trim(), proveedor: f.proveedor.trim() }),
         }
     try {
       const r = await api.registrar(req)
@@ -172,7 +179,7 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
           ) : (
             <div className="field">
               <span>Moneda</span>
-              <Segmented options={MONEDAS.map((m) => ({ value: m, label: m }))} value={f.moneda} onChange={(m) => set({ moneda: m })} label="Moneda" />
+              <Segmented options={OPCIONES_MONEDA} value={f.moneda} onChange={(m) => set({ moneda: m })} label="Moneda" />
             </div>
           )}
         </div>
@@ -239,8 +246,12 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
               <Chips options={CATEGORIAS_GASTO} value={f.categoria} onChange={(c) => set({ categoria: c })} label="Categoría" />
             </div>
             <label className="field">
-              Descripción
-              <input className="input" placeholder="Ej. harina y mantequilla" value={f.descripcion} onChange={(e) => set({ descripcion: e.target.value })} />
+              Concepto
+              <input className="input" placeholder="Ej. compra de harina y mantequilla" value={f.concepto} onChange={(e) => set({ concepto: e.target.value })} />
+            </label>
+            <label className="field">
+              Proveedor
+              <input className="input" placeholder="Opcional" value={f.proveedor} onChange={(e) => set({ proveedor: e.target.value })} />
             </label>
           </>
         )}
@@ -255,11 +266,20 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
               <span>Método de pago</span>
               <Chips grid options={METODOS} value={f.metodo} onChange={elegirMetodo} label="Método de pago" />
             </div>
-            <label className="field">
-              Referencia
-              <input className={aiCls('referencia')} inputMode="numeric" placeholder="Últimos dígitos" value={f.referencia}
-                onChange={(e) => set({ referencia: e.target.value, ia: { ...f.ia, referencia: false } })} />
-            </label>
+            <div className={tipo === 'venta' && METODOS_CON_BANCO.includes(f.metodo) ? 'grid-2' : ''}>
+              <label className="field">
+                Referencia
+                <input className={aiCls('referencia')} inputMode="numeric" placeholder="N° de operación" value={f.referencia}
+                  onChange={(e) => set({ referencia: e.target.value, ia: { ...f.ia, referencia: false } })} />
+              </label>
+              {tipo === 'venta' && METODOS_CON_BANCO.includes(f.metodo) && (
+                <label className="field">
+                  Banco
+                  <input className={aiCls('banco')} placeholder="Ej. Banesco" value={f.banco}
+                    onChange={(e) => set({ banco: e.target.value, ia: { ...f.ia, banco: false } })} />
+                </label>
+              )}
+            </div>
           </>
         )}
 

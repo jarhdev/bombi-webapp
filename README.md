@@ -5,12 +5,13 @@ Webapp interna de Bombi para registrar **ventas, gastos y cuentas por cobrar**, 
 - Especificación vigente: [`docs/PROMPT.md`](docs/PROMPT.md)
 - Guía paso a paso (Netlify, BotFather, n8n, usuarios): [`docs/GUIA.md`](docs/GUIA.md)
 - Workflows de n8n y respaldo del bot: [`n8n/`](n8n/)
+- Hallazgos de la Fase 1 (bot y Sheet): [`docs/FASE1.md`](docs/FASE1.md)
 
 ## Estado
 
 | Fase | Estado |
 |---|---|
-| 1. Respaldo de workflows y columnas del Sheet | Pendiente (lo hace Jose) |
+| 1. Respaldo de workflows y columnas del Sheet | Listo |
 | 2. Frontend con datos de prueba | Listo |
 | 3. n8n: auth, usuarios, registros, Sheets | Pendiente |
 | 4. Gemini + Drive | Pendiente |

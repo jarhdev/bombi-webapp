@@ -5,7 +5,7 @@ import CaptureField from '../components/CaptureField.jsx'
 import { api } from '../api/index.js'
 import { formatBs, formatMonto, formatUsd, montoInput, parseMonto, round2, toUsd } from '../lib/format.js'
 import { fechaCorta, hoyISO, nombreDia } from '../lib/dates.js'
-import { METODOS, MONEDA_POR_METODO, MONEDAS } from '../lib/constantes.js'
+import { METODOS, METODOS_CON_BANCO, MONEDA_POR_METODO, MONEDAS, OPCIONES_MONEDA } from '../lib/constantes.js'
 import { uid } from '../lib/uid.js'
 import { vibrar } from '../telegram/tg.js'
 
@@ -30,6 +30,7 @@ export default function PorCobrar({ back, go, notify }) {
           <div className="l">
             <span>Total pendiente</span>
             <strong>{data ? formatUsd(data.total_usd) : '…'}</strong>
+            {data?.hay_bs && <span style={{ fontSize: 12 }}>Órdenes en Bs convertidas a la tasa de hoy</span>}
           </div>
           <div className="r">
             <span>Cobro</span>
@@ -54,7 +55,7 @@ export default function PorCobrar({ back, go, notify }) {
                     {vencida ? 'Vencida · ' : 'Cobro '}{nombreDia(o.fecha_esperada_pago)} {fechaCorta(o.fecha_esperada_pago)}
                   </span>
                 </div>
-                <span className="amt">{formatMonto(o.monto, o.moneda || '$')}</span>
+                <span className="amt">{o.monto > 0 ? formatMonto(o.monto, o.moneda) : 'Sin monto'}</span>
               </div>
               <button className="btn btn-primary btn-block" onClick={() => setPagando(o)}>
                 <Icon name="camera" size={18} /> Marcar pagada + capture
@@ -93,7 +94,8 @@ function PagoSheet({ orden, onClose, onDone }) {
   const [monto, setMonto] = useState('')
   const [montoManual, setMontoManual] = useState(false)
   const [referencia, setReferencia] = useState('')
-  const [metodo, setMetodo] = useState('Pago móvil')
+  const [metodo, setMetodo] = useState('Pago Móvil')
+  const [banco, setBanco] = useState('')
   const [fecha, setFecha] = useState(hoyISO())
   const [ia, setIa] = useState({})
   const [guardando, setGuardando] = useState(false)
@@ -108,13 +110,18 @@ function PagoSheet({ orden, onClose, onDone }) {
     }).catch(() => {})
   }, [])
 
-  // La orden está en $; si pagan en Bs se convierte con la tasa del día del pago.
+  // Las órdenes de la app están en $; las del bot pueden estar en Bs (o en 0 si el bot no entendió el monto).
+  // Si pagan en otra moneda se convierte con la tasa del día del pago.
   const tasa = parseMonto(tasaTxt)
-  const esperado = moneda === '$' ? orden.monto : round2(orden.monto * tasa)
+  const ordenUsd = toUsd(orden.monto, orden.moneda, tasa)
+  const esperado = !(orden.monto > 0) ? 0
+    : orden.moneda === moneda ? orden.monto
+    : moneda === 'USD' ? ordenUsd : round2(orden.monto * tasa)
   const montoTexto = montoManual ? monto : esperado > 0 ? montoInput(esperado) : ''
   const montoNum = parseMonto(montoTexto)
   const montoUsd = toUsd(montoNum, moneda, tasa)
-  const diferencia = round2(montoUsd - orden.monto)
+  const diferencia = round2(montoUsd - ordenUsd)
+  const comparar = orden.monto > 0 && montoNum > 0
 
   function onLeido(d) {
     const nuevo = {}
@@ -123,6 +130,7 @@ function PagoSheet({ orden, onClose, onDone }) {
     if (d.referencia) { setReferencia(String(d.referencia)); nuevo.referencia = true }
     if (d.fecha && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha)) setFecha(d.fecha)
     if (d.metodo && METODOS.includes(d.metodo)) setMetodo(d.metodo)
+    if (d.banco) setBanco(d.banco)
     setIa(nuevo)
   }
 
@@ -135,7 +143,8 @@ function PagoSheet({ orden, onClose, onDone }) {
     try {
       await api.cobrar({
         request_id: requestId.current, orden: orden.orden, fecha, monto: montoNum, moneda, tasa,
-        tasa_editada: tasaDia ? tasa !== tasaDia.tasa : true, monto_usd: montoUsd, metodo,
+        tasa_editada: tasaDia ? tasa !== tasaDia.tasa : true, monto_usd: montoUsd,
+        monto_bs: moneda === 'Bs' ? montoNum : round2(montoNum * tasa), metodo, banco: banco.trim(),
         referencia: referencia.trim(), capture: capture?.blob || null, confirmar_duplicado: confirmarDuplicado,
       })
       vibrar('success')
@@ -164,7 +173,7 @@ function PagoSheet({ orden, onClose, onDone }) {
   return (
     <Sheet title={`Cobrar orden #${orden.orden}`} onClose={onClose}>
       <div className="notice">
-        <strong>{orden.cliente} · {formatUsd(orden.monto)}</strong>
+        <strong>{orden.cliente} · {orden.monto > 0 ? formatMonto(orden.monto, orden.moneda) : 'sin monto en la orden'}</strong>
         {orden.productos}
       </div>
 
@@ -178,7 +187,7 @@ function PagoSheet({ orden, onClose, onDone }) {
         </label>
         <div className="field">
           <span>Moneda</span>
-          <Segmented options={MONEDAS.map((m) => ({ value: m, label: m }))} value={moneda} onChange={(m) => { setMoneda(m); setMontoManual(false) }} label="Moneda" />
+          <Segmented options={OPCIONES_MONEDA} value={moneda} onChange={(m) => { setMoneda(m); setMontoManual(false) }} label="Moneda" />
         </div>
       </div>
 
@@ -190,7 +199,10 @@ function PagoSheet({ orden, onClose, onDone }) {
         </label>
       )}
 
-      {montoNum > 0 && (
+      {montoNum > 0 && !comparar && moneda === 'Bs' && (
+        <div className="notice"><strong>≈ {formatUsd(montoUsd)}</strong></div>
+      )}
+      {comparar && (
         <div className={`notice${Math.abs(diferencia) >= 0.5 ? ' warn' : ''}`}>
           <strong>
             {moneda === 'Bs' ? `≈ ${formatUsd(montoUsd)}` : formatUsd(montoUsd)}
@@ -204,6 +216,12 @@ function PagoSheet({ orden, onClose, onDone }) {
         <span>Método de pago</span>
         <Chips grid options={METODOS} value={metodo} onChange={(m) => { setMetodo(m); if (MONEDA_POR_METODO[m]) { setMoneda(MONEDA_POR_METODO[m]); setMontoManual(false) } }} label="Método de pago" />
       </div>
+      {METODOS_CON_BANCO.includes(metodo) && (
+        <label className="field">
+          Banco
+          <input className="input" placeholder="Ej. Banesco" value={banco} onChange={(e) => setBanco(e.target.value)} />
+        </label>
+      )}
       <div className="grid-2">
         <label className="field">
           Referencia

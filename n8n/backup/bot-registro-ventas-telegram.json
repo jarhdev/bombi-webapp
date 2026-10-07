@@ -1,0 +1,1902 @@
+{
+  "name": "Bombi · Registro de ventas (Telegram)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {
+          "download": true,
+          "imageSize": "large"
+        }
+      },
+      "id": "ba957097-3cf5-4337-9414-48393801bb85",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2240,
+        608
+      ],
+      "webhookId": "0ca2a49a-edc4-4264-8ee2-d6583d7e3d3d",
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== CONFIGURA AQUÍ =====\n// 1) Link de tu Google Sheet (la hoja Bombi_Control_Ventas importada)\nconst SHEET_URL = 'https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit?gid=1554250418#gid=1554250418';\n// Modelo de Gemini (gratis en AI Studio). Si algún día falla, cámbialo por otro Flash de ai.google.dev/gemini-api/docs/models\nconst MODELO = 'gemini-3.1-flash-lite';\n// 2) IDs de Telegram que pueden usar el bot (tú y tu novia).\n//    Déjalo vacío al principio; escríbele al bot y te dirá tu ID. Luego agrégalos así: [123456789, 987654321]\nconst PERMITIDOS = [/* IDs de Telegram omitidos en el repo */];\n// ==========================\n\nconst salida = [];\nfor (const item of $input.all()) {\n  const u = item.json.message?.from || item.json.callback_query?.from;\n  if (PERMITIDOS.length && !PERMITIDOS.includes(u?.id)) continue; // ignora a desconocidos\n  item.json.cfg = { sheetUrl: SHEET_URL, modelo: MODELO };\n  salida.push(item);\n}\nreturn salida;"
+      },
+      "id": "862a4265-3bfb-417a-9340-7c45f7c29ef2",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2016,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a60ff615-f3f7-4b0a-9ee7-fba2e008571e",
+                    "leftValue": "={{ $json.callback_query !== undefined }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Botón"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4c15160b-c7cc-4d4d-9027-1b5b5028164d",
+                    "leftValue": "={{ ($json.message?.text || '').toLowerCase().startsWith('/resumen') }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Resumen"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5d97b16f-22dd-4185-b2c3-db703576b81c",
+                    "leftValue": "={{ ($('Telegram Trigger').item.json.message?.text || '').trim().toLowerCase().startsWith('orden') }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Orden"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "2598cad7-b4e4-442d-b17c-7236eecf87d7",
+                    "leftValue": "={{ $json.message?.photo !== undefined }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Foto"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e9c262b8-b206-4f7d-9f75-846eac740f95",
+                    "leftValue": "={{ $json.message?.text !== undefined }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Texto"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a120d6a8-d4db-41f2-bc6f-8c77e6d28349",
+      "name": "Tipo de mensaje",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1808,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "destinationKey": "img",
+        "options": {}
+      },
+      "id": "10791650-95c1-4c84-8f04-424902068cab",
+      "name": "Imagen a base64",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1312,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $('Telegram Trigger').first().json.message;\nconst hoy = DateTime.now().setZone('America/Caracas').toFormat('yyyy-MM-dd');\nconst img = $input.first().json.img;            // solo existe si mandaron foto\nconst texto = msg.text || msg.caption || '';\n\nconst sistema = `Eres el asistente de registro de Bombi, un emprendimiento de galletas y brownies en Venezuela.\nRecibes una captura de pago o un mensaje escrito, y devuelves SOLO un objeto JSON, sin texto adicional.\n\nDecide el tipo:\n- \"venta\": un cliente pagó a Bombi (capturas de pago móvil, transferencias, Zelle, Binance, o mensajes como \"vendí 6 NY cookies en 15$\").\n- \"gasto\": Bombi compró algo (mensajes como \"gasto harina 5$\", \"compré empaques 300 bs\").\n- \"desconocido\": si no es ninguno de los dos o falta el monto.\n\nFormato exacto:\n{\"tipo\":\"venta|gasto|desconocido\",\"fecha\":\"YYYY-MM-DD\",\"monto\":0,\"moneda\":\"Bs|USD\",\"metodo\":\"\",\"banco\":\"\",\"referencia\":\"\",\"producto\":\"\",\"cantidad\":null,\"cliente\":\"\",\"concepto\":\"\",\"categoria\":\"\",\"proveedor\":\"\"}\n\nReglas:\n- Hoy es ${hoy}. Usa la fecha de la captura si se ve; si no, usa hoy.\n- monto es un número sin separadores de miles: \"1.234,56 Bs\" -> 1234.56.\n- moneda: \"Bs\" para bolívares (pago móvil, transferencia y punto de venta casi siempre son Bs); \"USD\" si dice $, dólares, Zelle o USDT.\n- metodo debe ser uno de: Pago Móvil, Transferencia, Efectivo Bs, Efectivo USD, Zelle, Binance, Punto de venta. Si dicen \"efectivo\" con $, es Efectivo USD.\n- referencia: el número de referencia/operación tal como aparece (solo dígitos y letras), o \"\".\n- banco: banco emisor del pago si se ve (Banesco, Mercantil, Venezuela, Provincial, BNC, etc.), o \"\".\n- cliente: nombre o teléfono del pagador si aparece, o \"\".\n- producto y cantidad: solo si el texto lo dice (ej. \"6 NY cookies\" -> producto \"NY Cookies\", cantidad 6).\n- Para gastos: concepto (qué se compró), categoria (Ingredientes, Empaques, Delivery, Servicios, Equipos, Publicidad u Otros) y proveedor si lo dicen.\n- Deja \"\" en los campos que no apliquen. No inventes datos.`;\n\nconst parts = [];\nif (img) parts.push({ inline_data: { mime_type: 'image/jpeg', data: img } });\nparts.push({ text: img ? `Captura de pago. Texto que la acompaña: ${texto || '(ninguno)'}` : `Mensaje: ${texto}` });\n\nreturn [{ json: {\n  modelo: $('Config').first().json.cfg.modelo,\n  body: {\n    system_instruction: { parts: [{ text: sistema }] },\n    contents: [{ role: 'user', parts }],\n    generationConfig: { temperature: 0, responseMimeType: 'application/json' }\n  }\n} }];"
+      },
+      "id": "d85d625e-f805-4f43-8c30-989f3954c602",
+      "name": "Preparar petición",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.modelo }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "11033fa5-41a7-469d-bd9d-cf215d139f64",
+      "name": "Gemini lee el pago",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -880,
+        704
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9nZlpeyvtgcAY3Rf",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://ve.dolarapi.com/v1/dolares/oficial",
+        "options": {}
+      },
+      "id": "93f26682-7019-40b8-b59f-d9c68e85e325",
+      "name": "Tasa BCV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -656,
+        704
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const caption = $('Telegram Trigger').first().json.message?.caption || '';\nconst mOrden = caption.match(/orden\\s*#?\\s*(\\d+)/i);\nconst ordenPago = mOrden ? Number(mOrden[1]) : '';\nconst from = $('Telegram Trigger').first().json.message.from;\nconst chatId = $('Telegram Trigger').first().json.message.chat.id;\nlet raw = ($('Gemini lee el pago').first().json.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');\nlet d = {};\ntry { d = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch (e) { d = { tipo: 'desconocido' }; }\n\nconst tasa = Number($input.first().json.promedio) || 0;\nconst now = DateTime.now().setZone('America/Caracas');\nconst monto = Number(d.monto) || 0;\nconst tipo = d.tipo === 'venta' || d.tipo === 'gasto' ? d.tipo : 'desconocido';\nconst ok = tipo !== 'desconocido' && monto > 0 && tasa > 0;\n\nconst moneda = d.moneda === 'USD' ? 'USD' : 'Bs';\nconst usd = moneda === 'USD' ? monto : Math.round((monto / tasa) * 100) / 100;\nconst bs = moneda === 'Bs' ? monto : Math.round(monto * tasa * 100) / 100;\nconst fecha = /^\\d{4}-\\d{2}-\\d{2}$/.test(d.fecha || '') ? d.fecha : now.toFormat('yyyy-MM-dd');\nconst ref = String(d.referencia || '').replace(/[^0-9A-Za-z]/g, '');\nconst id = (tipo === 'gasto' ? 'G-' : 'V-') + now.toFormat('yyMMdd-HHmmss');\nconst quien = from.first_name || '';\nconst metodos = ['Pago Móvil','Transferencia','Efectivo Bs','Efectivo USD','Zelle','Binance','Punto de venta'];\nconst metodo = metodos.includes(d.metodo) ? d.metodo : (moneda === 'Bs' ? 'Pago Móvil' : 'Efectivo USD');\nconst txt = v => (v === null || v === undefined) ? '' : String(v);\nconst texto = ref ? \"'\" + ref : '';   // el apóstrofo evita que la hoja borre ceros a la izquierda\n\nlet registro;\nif (tipo === 'gasto') {\n  registro = { 'ID': id, 'Fecha': fecha, 'Hora': now.toFormat('HH:mm'), 'Concepto': txt(d.concepto),\n    'Categoría': txt(d.categoria) || 'Otros', 'Monto': monto, 'Moneda': moneda, 'Tasa BCV': tasa,\n    'Monto USD': usd, 'Monto Bs': bs, 'Método': metodo, 'Proveedor': txt(d.proveedor),\n    'Referencia': texto, 'Registrado por': quien };\n} else {\n  registro = { 'ID': id, 'Fecha': fecha, 'Hora': now.toFormat('HH:mm'), 'Producto': txt(d.producto),\n    'Cantidad': d.cantidad ?? '', 'Monto': monto, 'Moneda': moneda, 'Tasa BCV': tasa,\n    'Monto USD': usd, 'Monto Bs': bs, 'Método': metodo, 'Banco': txt(d.banco),\n    'Referencia': texto, 'Cliente': txt(d.cliente), 'Registrado por': quien };\n}\n\nconst esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst fmtBs = n => n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\nconst [y, m, dd] = fecha.split('-');\nconst lineas = [\n  tipo === 'gasto' ? '🧾 <b>Gasto</b>' : '🍪 <b>Venta</b>',\n  tipo === 'gasto' ? `Concepto: ${esc(registro['Concepto'] || '—')} (${esc(registro['Categoría'])})`\n                   : `Producto: ${esc(registro['Producto'] || '—')}${registro['Cantidad'] !== '' ? ' × ' + registro['Cantidad'] : ''}`,\n  `Monto: ${moneda === 'Bs' ? fmtBs(monto) + ' Bs  (≈ $' + usd.toFixed(2) + ')' : '$' + monto.toFixed(2) + '  (≈ ' + fmtBs(bs) + ' Bs)'}`,\n  `Método: ${esc(metodo)}${registro['Banco'] ? ' · ' + esc(registro['Banco']) : ''}`,\n  ref ? `Ref: ${esc(ref)}` : null,\n  registro['Cliente'] ? `Cliente: ${esc(registro['Cliente'])}` : null,\n  `Fecha: ${dd}/${m}/${y} · Tasa BCV ${fmtBs(tasa)}`,\n].filter(Boolean);\nregistro['Orden'] = ordenPago;\nreturn [{ json: { ok, tipo, id, chatId, ref, Orden: ordenPago, registro, resumen: lineas.join('\\n'), userId: from.id,\n  motivo: !tasa ? 'No pude obtener la tasa BCV ahora mismo.' : '' } }];"
+      },
+      "id": "3a8270e6-c22a-42f4-9679-c4756aafcbd4",
+      "name": "Armar registro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -432,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8a736dea-8ba5-4186-a97c-15d4e5b38ba9",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ce713ddb-44db-43da-88c5-90199a535f8b",
+      "name": "¿Se entendió?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ ($json.motivo ? $json.motivo + '\\n\\n' : '') + 'No pude identificar una venta o un gasto. Puedes:\\n• Mandar la captura del pago (pago móvil, Zelle, Binance...)\\n• Escribir: vendí 6 NY cookies en 15$ efectivo\\n• Escribir: gasto harina 2kg 5$\\n• Escribir /resumen para ver las ganancias\\n\\nTu ID de Telegram: ' + $json.userId }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "5a9efb16-f435-41cf-a894-695c1e4bdd3e",
+      "name": "No entendí",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        864
+      ],
+      "webhookId": "4d566d29-c3f1-4842-970a-af461be01793",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.cfg.sheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Ventas",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Referencia",
+              "lookupValue": "={{ $json.ref || '__sin_referencia__' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bb203191-9b4e-43ed-b5bc-f3fc59de1bb6",
+      "name": "Buscar referencia",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        608
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $('Armar registro').first().json;\nconst dup = r.tipo === 'venta' && r.ref &&\n  $input.all().some(i => String(i.json['Referencia'] ?? '').replace(/^'/, '') === r.ref);\nconst aviso = dup ? '\\n\\n⚠️ <b>Ya hay una venta con esa referencia.</b> Revisa que no sea la misma captura.' : '';\nreturn [{ json: { ...r, texto: r.resumen + aviso + '\\n\\n¿Lo guardo?' } }];"
+      },
+      "id": "b42e645a-bce0-4266-9c58-0405ace7b8a0",
+      "name": "Revisar duplicado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.cfg.sheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Pendientes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $json.id }}",
+            "Tipo": "={{ $json.tipo }}",
+            "Estado": "pendiente",
+            "Creado": "={{ $now.setZone('America/Caracas').toFormat('yyyy-MM-dd HH:mm') }}",
+            "Chat ID": "={{ $json.chatId }}",
+            "Datos": "={{ JSON.stringify($json.registro) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tipo",
+              "displayName": "Tipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado",
+              "displayName": "Estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Creado",
+              "displayName": "Creado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Chat ID",
+              "displayName": "Chat ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Datos",
+              "displayName": "Datos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "bb81fc8e-7cec-455b-a083-90e451e69e10",
+      "name": "Guardar pendiente",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        608
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Revisar duplicado').first().json.chatId }}",
+        "text": "={{ $('Revisar duplicado').first().json.texto }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Guardar",
+                    "additionalFields": {
+                      "callback_data": "=ok|{{ $('Revisar duplicado').first().json.id }}"
+                    }
+                  },
+                  {
+                    "text": "❌ Descartar",
+                    "additionalFields": {
+                      "callback_data": "=no|{{ $('Revisar duplicado').first().json.id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "7ee4722f-67c8-4b0d-9e21-0c55a135f801",
+      "name": "Pedir confirmación",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        608
+      ],
+      "webhookId": "24a41cd4-2a4f-4ac2-80ea-6e879b235f0f",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.cfg.sheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Pendientes",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "ID",
+              "lookupValue": "={{ ($json.callback_query.data || '').split('|')[1] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ad5a3fa1-ce68-4816-9a7b-75498e515e65",
+      "name": "Leer pendiente",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -1536,
+        304
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cq = $('Telegram Trigger').first().json.callback_query;\nconst [accion, id] = (cq.data || '').split('|');\nconst fila = $input.all().map(i => i.json).find(r => r['ID'] === id);\nlet registro = null;\ntry { registro = JSON.parse(fila?.['Datos'] || 'null'); } catch (e) {}\nreturn [{ json: {\n  accion, id, registro,\n  tipo: fila?.['Tipo'],\n  valido: !!fila && fila['Estado'] === 'pendiente' && !!registro,\n  cbId: cq.id, chatId: cq.message.chat.id, msgId: cq.message.message_id,\n  textoOriginal: cq.message.text || ''\n} }];"
+      },
+      "id": "694f8ef7-fb57-464e-a131-b435e413723d",
+      "name": "Procesar botón",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3cdd72f4-5367-4d0c-b51b-4e6f03cc7456",
+              "leftValue": "={{ $json.valido }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "17e3f351-eec4-40af-8020-2f9995d5ff7c",
+      "name": "¿Sigue pendiente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1104,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $json.cbId }}",
+        "additionalFields": {
+          "text": "Esto ya se guardó o descartó antes."
+        }
+      },
+      "id": "7f05135b-2226-4be0-a28d-fb9843574899",
+      "name": "Ya procesado",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -656,
+        464
+      ],
+      "webhookId": "3faf19d1-c6dc-42fe-a82a-1bd91132ab19",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.cfg.sheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Pendientes",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $json.id }}",
+            "Estado": "={{ $json.accion === 'ok' ? 'confirmado' : 'descartado' }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Tipo",
+              "displayName": "Tipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado",
+              "displayName": "Estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Creado",
+              "displayName": "Creado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Chat ID",
+              "displayName": "Chat ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Datos",
+              "displayName": "Datos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "67513428-37d9-47e2-95f0-9ac905afd23f",
+      "name": "Marcar estado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -880,
+        208
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0db97520-35e3-43fa-81da-8d15a4ee41b5",
+              "leftValue": "={{ $('Procesar botón').first().json.accion === 'ok' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9a7fc1b9-0fa1-48dc-b47e-9c235f9ba4e8",
+      "name": "¿Guardar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -656,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Procesar botón').first().json.registro }];"
+      },
+      "id": "b6bf4476-12f7-40fd-856f-71ae1a9d0e2f",
+      "name": "Fila a guardar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ff8c0f62-3927-4695-af14-31f0248287c8",
+              "leftValue": "={{ $('Procesar botón').first().json.tipo === 'venta' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a7f29b84-a706-49a7-9bca-3896da55b7fa",
+      "name": "¿Venta o gasto?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.cfg.sheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Ventas",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "handlingExtraData": "ignoreIt"
+        }
+      },
+      "id": "4e2e05e2-4c62-4150-bb25-2ddcb225f37d",
+      "name": "Guardar en Ventas",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.cfg.sheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Gastos",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "handlingExtraData": "ignoreIt"
+        }
+      },
+      "id": "4a3fb372-bb92-475e-a79d-c2657152bb8f",
+      "name": "Guardar en Gastos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        192
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $('Procesar botón').first().json.cbId }}",
+        "additionalFields": {
+          "text": "={{ $('Procesar botón').first().json.accion === 'ok' ? '✅ Guardado' : '❌ Descartado' }}"
+        }
+      },
+      "id": "ad894c14-081c-4ebb-9350-bf41582f72fc",
+      "name": "Responder botón",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        64
+      ],
+      "executeOnce": true,
+      "webhookId": "8c2336c4-7153-4012-95be-fddc7dc4abc1",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Procesar botón').first().json.chatId }}",
+        "messageId": "={{ $('Procesar botón').first().json.msgId }}",
+        "text": "={{ $('Procesar botón').first().json.textoOriginal.replace(/\\n\\n¿Lo guardo\\?$/, '') + '\\n\\n' + ($('Procesar botón').first().json.accion === 'ok' ? '✅ Guardado en ' + ($('Procesar botón').first().json.tipo === 'venta' ? 'Ventas' : 'Gastos') : '❌ Descartado') }}",
+        "additionalFields": {}
+      },
+      "id": "562b495b-1e0b-4662-b5a8-fd6283e2e51f",
+      "name": "Actualizar mensaje",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        64
+      ],
+      "webhookId": "cf7c161b-8094-411f-b46b-c557ceff351a",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Config').first().json.cfg.sheetUrl }}",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Bot",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "a9eb2970-25e8-4d54-a1fa-2904ab68172d",
+      "name": "Leer resumen",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -1312,
+        464
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatId = $('Telegram Trigger').first().json.message.chat.id;\nconst filas = $input.all().map(i => i.json).filter(r => r['Periodo']);\nconst emoji = { 'Hoy': '📅', 'Esta semana': '🗓️', 'Este mes': '📆' };\nconst partes = filas.map(r =>\n  `${emoji[r['Periodo']] || '•'} <b>${r['Periodo']}</b>\\n` +\n  `Ventas: ${r['Ventas USD']} (${r['Nº ventas']})\\n` +\n  `Gastos: ${r['Gastos USD']}\\n` +\n  `Ganancia: <b>${r['Ganancia USD']}</b>`);\nconst texto = partes.length ? '🍪 <b>Resumen Bombi</b> (USD, tasa BCV)\\n\\n' + partes.join('\\n\\n')\n                            : 'No pude leer la hoja Bot. Revisa el link en el nodo Config.';\nreturn [{ json: { chatId, texto } }];"
+      },
+      "id": "77a7eae3-cee5-469a-aab5-f02712859f9a",
+      "name": "Armar resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.texto }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "89104047-3bbd-4792-9fb7-494b3993acf3",
+      "name": "Enviar resumen",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -880,
+        464
+      ],
+      "webhookId": "3e72d109-873f-40ba-9e65-9093b47844db",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const texto = $('Telegram Trigger').first().json.message.text;\nconst hoy = $now.setZone('America/Caracas').toFormat('yyyy-MM-dd (cccc)');\nconst prompt = `Extrae los datos de esta orden de galletas. Hoy es ${hoy}.\nSi dice \"viernes\", usa la fecha del próximo viernes.\nResponde SOLO con JSON: {\"cliente\":\"\",\"productos\":\"\",\"monto\":0,\"moneda\":\"Bs\",\"fecha_esperada_pago\":\"YYYY-MM-DD\"}\nOrden: ${texto}`;\n\nreturn [{ json: {\n  modelo: 'gemini-3.1-flash-lite',\n  body: {\n    contents: [{ parts: [{ text: prompt }] }],\n    generationConfig: { responseMimeType: 'application/json' }\n  }\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1312,
+        848
+      ],
+      "id": "a5dc928d-f0d4-4e2c-a917-ce263fe24d7c",
+      "name": "Preparar orden"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $json.modelo }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "f72189c8-4a2c-4dac-acde-3f9c1b2dbf86",
+      "name": "Gemini lee la orden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1104,
+        880
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9nZlpeyvtgcAY3Rf",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Bombi_Control_Ventas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 647782841,
+          "mode": "list",
+          "cachedResultName": "Por cobrar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit#gid=647782841"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -880,
+        880
+      ],
+      "id": "cbd8d068-ffe5-4364-9f7e-4f840f07ad5e",
+      "name": "Leer Por Cobrar",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Número siguiente\nconst filas = $('Leer Por Cobrar').all();\nconst nums = filas.map(f => Number(f.json.Orden)).filter(n => n > 0);\nconst siguiente = nums.length ? Math.max(...nums) + 1 : 1;\n\n// Respuesta de Gemini (vía HTTP)\nlet txt = $('Gemini lee la orden').first().json.candidates[0].content.parts[0].text;\nconst d = JSON.parse(txt.replace(/```json|```/g, '').trim());\n\nreturn [{ json: {\n  'Orden': siguiente,\n  'Fecha entrega': $now.setZone('America/Caracas').toFormat('yyyy-MM-dd'),\n  'Cliente': d.cliente,\n  'Productos': d.productos,\n  'Monto': Number(d.monto),\n  'Moneda': d.moneda,\n  'Fecha esperada pago': d.fecha_esperada_pago,\n  'Estado': 'pendiente',\n  'Fecha pago': '',\n  'Referencia': ''\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        880
+      ],
+      "id": "ea3b1845-ef30-40b3-ada9-6977a34833d8",
+      "name": "Armar orden"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Bombi_Control_Ventas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 647782841,
+          "mode": "list",
+          "cachedResultName": "Por cobrar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit#gid=647782841"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Orden",
+              "displayName": "Orden",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fecha entrega",
+              "displayName": "Fecha entrega",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Cliente",
+              "displayName": "Cliente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Producto",
+              "displayName": "Producto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Monto",
+              "displayName": "Monto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Moneda",
+              "displayName": "Moneda",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fecha esperada de pago",
+              "displayName": "Fecha esperada de pago",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado",
+              "displayName": "Estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Fecha de pago",
+              "displayName": "Fecha de pago",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Metodo de pago",
+              "displayName": "Metodo de pago",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Referencia",
+              "displayName": "Referencia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -432,
+        880
+      ],
+      "id": "73f3969d-9228-4f7e-b194-3478bcf8f64a",
+      "name": "Crear orden",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=✅ Orden {{ $json.Orden }} registrada: {{ $json.Cliente }} – {{ $json.Moneda }} {{ $json.Monto }} – pendiente",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -208,
+        880
+      ],
+      "id": "c7811006-77e1-468a-b568-70a1ce0b2a20",
+      "name": "Confirmar orden",
+      "webhookId": "eea8f414-a9e6-49f3-81ad-39b54061d8dd",
+      "credentials": {
+        "telegramApi": {
+          "id": "JFJbwR2h01uWDGEH",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6e2f4850-ffa5-4d20-86aa-8c7704098a9d",
+              "leftValue": "={{ JSON.parse($('Leer pendiente').item.json.Datos).Orden }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        240,
+        240
+      ],
+      "id": "721e6551-17c0-4da2-ab97-b2d81e42f45e",
+      "name": "¿Es pago de orden?"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Bombi_Control_Ventas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 647782841,
+          "mode": "list",
+          "cachedResultName": "Por cobrar",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SHEET_ID/edit#gid=647782841"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Orden": "={{ JSON.parse($('Leer pendiente').item.json.Datos).Orden }}",
+            "Estado": "pagado",
+            "Referencia": "={{ JSON.parse($('Leer pendiente').item.json.Datos).Referencia }}",
+            "Fecha pago": "={{  $now.setZone('America/Caracas').toFormat('yyyy-MM-dd') }}",
+            "Metodo de pago": "={{  JSON.parse($('Leer pendiente').item.json.Datos)['Método'] }}"
+          },
+          "matchingColumns": [
+            "Orden"
+          ],
+          "schema": [
+            {
+              "id": "Orden",
+              "displayName": "Orden",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Fecha entrega",
+              "displayName": "Fecha entrega",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Cliente",
+              "displayName": "Cliente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Productos",
+              "displayName": "Productos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Monto",
+              "displayName": "Monto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Moneda",
+              "displayName": "Moneda",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Fecha esperada pago",
+              "displayName": "Fecha esperada pago",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Estado",
+              "displayName": "Estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Fecha pago",
+              "displayName": "Fecha pago",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Metodo de pago",
+              "displayName": "Metodo de pago",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Referencia",
+              "displayName": "Referencia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        240
+      ],
+      "id": "ccb1e76d-d300-4af3-b901-95724092155a",
+      "name": "Marcar orden pagada",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "d9JzMLg0lUmByTRr",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Tipo de mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo de mensaje": {
+      "main": [
+        [
+          {
+            "node": "Leer pendiente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer resumen",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar orden",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Imagen a base64",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar petición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Imagen a base64": {
+      "main": [
+        [
+          {
+            "node": "Preparar petición",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar petición": {
+      "main": [
+        [
+          {
+            "node": "Gemini lee el pago",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini lee el pago": {
+      "main": [
+        [
+          {
+            "node": "Tasa BCV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tasa BCV": {
+      "main": [
+        [
+          {
+            "node": "Armar registro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar registro": {
+      "main": [
+        [
+          {
+            "node": "¿Se entendió?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se entendió?": {
+      "main": [
+        [
+          {
+            "node": "Buscar referencia",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No entendí",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar referencia": {
+      "main": [
+        [
+          {
+            "node": "Revisar duplicado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revisar duplicado": {
+      "main": [
+        [
+          {
+            "node": "Guardar pendiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar pendiente": {
+      "main": [
+        [
+          {
+            "node": "Pedir confirmación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer pendiente": {
+      "main": [
+        [
+          {
+            "node": "Procesar botón",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar botón": {
+      "main": [
+        [
+          {
+            "node": "¿Sigue pendiente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Sigue pendiente?": {
+      "main": [
+        [
+          {
+            "node": "Marcar estado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ya procesado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar estado": {
+      "main": [
+        [
+          {
+            "node": "¿Guardar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Guardar?": {
+      "main": [
+        [
+          {
+            "node": "Fila a guardar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder botón",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fila a guardar": {
+      "main": [
+        [
+          {
+            "node": "¿Venta o gasto?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Venta o gasto?": {
+      "main": [
+        [
+          {
+            "node": "Guardar en Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Guardar en Gastos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en Ventas": {
+      "main": [
+        [
+          {
+            "node": "Responder botón",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Es pago de orden?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en Gastos": {
+      "main": [
+        [
+          {
+            "node": "Responder botón",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder botón": {
+      "main": [
+        [
+          {
+            "node": "Actualizar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer resumen": {
+      "main": [
+        [
+          {
+            "node": "Armar resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar resumen": {
+      "main": [
+        [
+          {
+            "node": "Enviar resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar orden": {
+      "main": [
+        [
+          {
+            "node": "Gemini lee la orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini lee la orden": {
+      "main": [
+        [
+          {
+            "node": "Leer Por Cobrar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Por Cobrar": {
+      "main": [
+        [
+          {
+            "node": "Armar orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar orden": {
+      "main": [
+        [
+          {
+            "node": "Crear orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear orden": {
+      "main": [
+        [
+          {
+            "node": "Confirmar orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es pago de orden?": {
+      "main": [
+        [
+          {
+            "node": "Marcar orden pagada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "b8e1d3c9-4f45-462b-9e09-b8c38c6401a7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0bb72e3f1e6708f32391e34d18b829cd5481b3dc86f3e68dceb496037a939b47"
+  },
+  "nodeGroups": [],
+  "id": "ZCIqjm7HG9YPODAV",
+  "tags": []
+}
