@@ -233,7 +233,7 @@ function resumen(ctx, h, res) {
       titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : o.pagado_usd > 0 ? `Abonado $${o.pagado_usd.toFixed(2)} · faltan $${o.saldo_usd.toFixed(2)}` : 'Pendiente de cobro', monto_usd: o.monto_usd })),
   ].sort((a, b) => b.k.localeCompare(a.k)).slice(0, 5).map(({ k, ...m }) => m);
   return res(200, { desde, hasta, ventas_usd: ventas, gastos_usd: gastos, ganancia_usd: r2(ventas - gastos),
-    por_cobrar: { cantidad: pend.length, total_usd: r2(pend.reduce((s, o) => s + (o.monto_usd > 0 ? o.saldo_usd : 0), 0)) }, ultimos: movs, tasa });
+    por_cobrar: { cantidad: pend.length, total_usd: r2(pend.reduce((s, o) => s + (o.monto_usd > 0 ? o.saldo_usd : 0), 0)) }, ultimos: movs, tasa, inventario_bajo: stockBajo(h) });
 }
 
 function porCobrar(ctx, h, res) {
@@ -253,7 +253,7 @@ function buscarReferencia(h, ref) {
   return g ? { tipo: 'gasto', fecha: g.fecha, monto: g.monto, moneda: g.moneda, cliente: g.concepto } : null;
 }
 function yaProcesado(h, rid) {
-  return !!txt(rid) && [...h.Ventas.filas, ...h.Gastos.filas, ...h['Por cobrar'].filas].some((f) => txt(f['Request id']) === txt(rid));
+  return !!txt(rid) && [...h.Ventas.filas, ...h.Gastos.filas, ...h['Por cobrar'].filas, ...hojaOpc(h, 'Inventario').filas].some((f) => txt(f['Request id']) === txt(rid));
 }
 function nuevoId(t, pref, ahora) {
   const base = `${pref}-${caracas(ahora).compacto}`;
@@ -284,6 +284,7 @@ function registro(ctx, h, res, u) {
       Orden: n, 'Fecha entrega': entrega, Cliente: seguro(b.cliente), Productos: seguro(b.productos), Monto: monto, Moneda: 'USD',
       'Fecha esperada pago': fechaCelda(b.fecha_esperada_pago) || viernesSiguiente(entrega), Estado: 'pendiente',
       'Registrado por': u.nombre, Origen: 'webapp', ...(P.enc.includes('Request id') ? { 'Request id': txt(b.request_id) } : {}) }) });
+    registrarDetalle(h, res, itemsValidos(h, b.items), { fecha: entrega, tipo: 'orden', registro: `O-${n}` });
     return res(200, { ok: true, orden: n });
   }
   if (b.tipo !== 'venta' && b.tipo !== 'gasto') throw new Fallo(400, 'Tipo de registro desconocido.');
@@ -301,6 +302,7 @@ function registro(ctx, h, res, u) {
     if (ctx.tieneCapture) res.nombrarCapture(id);
     res.escrituras.push({ tipo: 'append', hoja: 'Ventas', fila: filaPara(h.Ventas, { ID: id, ...comun,
       Producto: seguro(b.productos), Cantidad: num(b.cantidad) || '', Banco: seguro(b.banco), Cliente: seguro(b.cliente) }) });
+    registrarDetalle(h, res, itemsValidos(h, b.items), { fecha: comun.Fecha, tipo: 'venta', registro: id });
     return res(200, { ok: true, id });
   }
   if (!CATEGORIAS.includes(b.categoria)) throw new Fallo(400, 'Categoría no válida.');
@@ -350,6 +352,7 @@ function anular(ctx, h, res) {
     if (!f || sinAcentos(f.Estado) !== 'pendiente') throw new Fallo(400, 'Solo se pueden anular órdenes pendientes.');
     if (abonosPorOrden(h)[num(f.Orden)] > 0) throw new Fallo(400, 'Esta orden tiene abonos. Anula primero esas ventas.');
     res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, 'Estado'), valor: 'anulada' });
+    anularDetalle(h, res, `O-${num(f.Orden)}`);
     return res(200, { ok: true });
   }
   const t = tipo === 'venta' ? h.Ventas : tipo === 'gasto' ? h.Gastos : null;
@@ -357,6 +360,7 @@ function anular(ctx, h, res) {
   if (!f) throw new Fallo(404, 'Registro no encontrado.');
   if (esSi(f.Anulado)) throw new Fallo(400, 'Ese registro ya está anulado.');
   res.escrituras.push({ tipo: 'update', rango: celda(t, f._fila, 'Anulado'), valor: 'sí' });
+  anularDetalle(h, res, txt(f.ID));
   // Si era un abono de una orden, recalcula lo cobrado y reabre la orden si ya no está cubierta.
   const n = tipo === 'venta' ? num(f.Orden) : 0;
   const P = h['Por cobrar']; const fo = n > 0 ? P.filas.find((x) => num(x.Orden) === n) : null;
@@ -371,6 +375,103 @@ function anular(ctx, h, res) {
     }
   }
   return res(200, { ok: true });
+}
+
+
+// ---------- Inventario ----------
+// Detalle ventas: una fila por producto de cada venta u orden registrada en la app (para "vendidos por semana").
+// Inventario: entradas y ajustes. Stock = entradas/ajustes − detalle que descuenta (sin anulados).
+const hojaOpc = (h, n) => h[n] || { nombre: n, enc: [], filas: [] };
+const etiqueta = (f) => `${txt(f.Nombre)} ${txt(f['Presentación'])}`.trim();
+const minimoDe = (f) => (txt(f['Stock mínimo']) === '' ? null : num(f['Stock mínimo']));
+const controlados = (h) => h.Productos.filas.filter((f) => minimoDe(f) !== null);
+function itemsValidos(h, items, { ceroOk = false } = {}) {
+  const cat = {}; for (const f of h.Productos.filas) cat[txt(f.id)] = f;
+  const out = {};
+  for (const it of Array.isArray(items) ? items : []) {
+    const id = txt(it?.id); const c = Math.round(num(it?.cantidad));
+    if (cat[id] && (c > 0 || (ceroOk && c === 0 && txt(it?.cantidad) !== ''))) out[id] = (out[id] || 0) + c;
+  }
+  return Object.entries(out).map(([id, cantidad]) => ({ id, cantidad, nombre: etiqueta(cat[id]) }));
+}
+function stockActual(h) {
+  const s = {};
+  for (const f of hojaOpc(h, 'Inventario').filas) { const id = txt(f['Producto id']); s[id] = (s[id] || 0) + num(f.Cantidad); }
+  for (const f of hojaOpc(h, 'Detalle ventas').filas) {
+    if (!esSi(f['Descuenta inventario']) || esSi(f.Anulado)) continue;
+    const id = txt(f['Producto id']); s[id] = (s[id] || 0) - num(f.Cantidad);
+  }
+  return s;
+}
+const chatsAdmins = (h) => h.Usuarios.filas.filter((f) => txt(f.rol) === 'admin' && txt(f.estado) === 'activo' && txt(f.telegram_id)).map((f) => txt(f.telegram_id));
+// Avisa a los admins solo cuando este cambio hace que un producto baje de su mínimo (no en cada venta).
+function avisarStockBajo(h, res, delta) {
+  const antes = stockActual(h); const bajos = [];
+  for (const f of controlados(h)) {
+    const id = txt(f.id); if (!delta[id]) continue;
+    const min = minimoDe(f); const a = antes[id] || 0; const d = a + delta[id];
+    if (a >= min && d < min) bajos.push(`• ${etiqueta(f)}: quedan ${d}`);
+  }
+  if (!bajos.length) return;
+  for (const chat_id of chatsAdmins(h)) res.avisos.push({ chat_id, texto: `Pocas galletas en Bombi (menos de su mínimo):\n${bajos.join('\n')}\nCarga más en la app: Inventario.` });
+}
+function registrarDetalle(h, res, items, { fecha, tipo, registro }) {
+  const D = h['Detalle ventas']; if (!D || !items.length) return;
+  for (const it of items) res.escrituras.push({ tipo: 'append', hoja: 'Detalle ventas', fila: filaPara(D, {
+    Fecha: fecha, 'Semana (lunes)': rango('semana', fecha)[0], 'Producto id': it.id, Producto: it.nombre, Cantidad: it.cantidad,
+    Tipo: tipo, Registro: registro, 'Descuenta inventario': 'sí', Origen: 'webapp' }) });
+  avisarStockBajo(h, res, Object.fromEntries(items.map((i) => [i.id, -i.cantidad])));
+}
+function anularDetalle(h, res, registro) {
+  const D = h['Detalle ventas']; if (!D) return;
+  for (const f of D.filas) if (txt(f.Registro) === registro && !esSi(f.Anulado)) res.escrituras.push({ tipo: 'update', rango: celda(D, f._fila, 'Anulado'), valor: 'sí' });
+}
+function stockBajo(h) {
+  const s = stockActual(h);
+  return controlados(h).filter((f) => (s[txt(f.id)] || 0) < minimoDe(f)).map((f) => ({ id: txt(f.id), nombre: etiqueta(f), stock: s[txt(f.id)] || 0 }));
+}
+function inventario(ctx, h, res) {
+  const s = stockActual(h);
+  const productos = controlados(h).filter((f) => esSi(f.Activo) || (s[txt(f.id)] || 0) !== 0).map((f) => {
+    const id = txt(f.id); const stock = s[id] || 0; const minimo = minimoDe(f);
+    return { id, nombre: etiqueta(f), sabor: txt(f.Nombre), presentacion: txt(f['Presentación']), categoria: txt(f['Categoría']), stock, minimo, bajo: stock < minimo };
+  });
+  const sem = {};
+  for (const f of hojaOpc(h, 'Detalle ventas').filas) {
+    if (esSi(f.Anulado)) continue;
+    const fecha = fechaCelda(f.Fecha); if (!fecha) continue;
+    const lunes = rango('semana', fecha)[0]; const id = txt(f['Producto id']);
+    const k = (sem[lunes] = sem[lunes] || {});
+    k[id] = k[id] || { id, nombre: txt(f.Producto), cantidad: 0 }; k[id].cantidad += num(f.Cantidad);
+  }
+  const hoy = caracas(ctx.ahora).fecha; const actual = rango('semana', hoy)[0]; sem[actual] = sem[actual] || {};
+  const semanas = Object.keys(sem).sort().reverse().slice(0, 8).map((desde) => {
+    const productos = Object.values(sem[desde]).sort((a, b) => b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre));
+    return { desde, hasta: sumarDias(desde, 6), productos, total: productos.reduce((t, p) => t + p.cantidad, 0) };
+  });
+  return res(200, { disponible: !!h.Inventario && !!h['Detalle ventas'], productos, semanas });
+}
+function inventarioMover(ctx, h, res, u) {
+  const b = ctx.body; const I = h.Inventario; const c = caracas(ctx.ahora);
+  if (!I) throw new Fallo(503, 'Falta la pestaña Inventario en el Sheet.');
+  if (yaProcesado(h, b.request_id)) return res(200, { ok: true, repetido: true });
+  const ids = new Set(controlados(h).map((f) => txt(f.id)));
+  const conteo = b.tipo === 'conteo';
+  if (!conteo && b.tipo !== 'entrada') throw new Fallo(400, 'Tipo de movimiento desconocido.');
+  if (conteo && u.rol !== 'admin') throw new Fallo(403, 'Solo un admin puede corregir el conteo.');
+  const items = itemsValidos(h, b.items, { ceroOk: conteo }).filter((i) => ids.has(i.id));
+  if (!items.length) throw new Fallo(400, conteo ? 'Escribe la cantidad contada de al menos un producto.' : 'Agrega al menos una galleta.');
+  const stock = stockActual(h); const delta = {};
+  for (const it of items) {
+    const cantidad = conteo ? it.cantidad - (stock[it.id] || 0) : it.cantidad;
+    if (!cantidad) continue;
+    delta[it.id] = cantidad;
+    res.escrituras.push({ tipo: 'append', hoja: 'Inventario', fila: filaPara(I, {
+      Fecha: c.fecha, Hora: c.hora, 'Producto id': it.id, Producto: it.nombre, Movimiento: conteo ? 'ajuste' : 'entrada', Cantidad: cantidad,
+      Nota: seguro(conteo ? `Conteo real: ${it.cantidad}${txt(b.nota) ? ` · ${txt(b.nota)}` : ''}` : b.nota), 'Registrado por': u.nombre, 'Request id': txt(b.request_id) }) });
+  }
+  if (conteo) avisarStockBajo(h, res, delta);
+  return res(200, { ok: true, cambios: Object.keys(delta).length });
 }
 
 const producto = (f) => ({ id: txt(f.id), nombre: txt(f.Nombre), categoria: txt(f['Categoría']), presentacion: txt(f['Presentación']), precio: r2(f['Precio USD']), activo: esSi(f.Activo) });
@@ -449,6 +550,8 @@ function procesar(ctx) {
       case 'cobrar': return cobrar(ctx, h, res, u);
       case 'anular': return anular(ctx, h, res);
       case 'productos': return res(200, { productos: h.Productos.filas.map(producto) });
+      case 'inventario': return inventario(ctx, h, res);
+      case 'inventario-mover': return inventarioMover(ctx, h, res, u);
       case 'productos-guardar': return guardarProductos(ctx, h, res);
       case 'usuarios': return res(200, { usuarios: h.Usuarios.filas.map((f) => ({ ...publico(f), telegram_id: txt(f.telegram_id), fecha_creacion: fechaCelda(f.fecha_creacion) })) });
       case 'usuarios-accion': return usuarioAccion(ctx, h, res, u);

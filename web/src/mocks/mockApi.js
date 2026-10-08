@@ -2,7 +2,8 @@
 // para que la app se pueda usar de punta a punta sin backend. Mismo contrato que api/http.js.
 import { seedDb } from './seed.js'
 import { hoyISO } from '../lib/dates.js'
-import { rangoPeriodo } from '../lib/dates.js'
+import { addDays, rangoPeriodo } from '../lib/dates.js'
+import { etiquetaProducto } from '../lib/productos.js'
 import { round2, toUsd } from '../lib/format.js'
 import { ApiError } from '../api/errors.js'
 import { getToken } from '../api/session.js'
@@ -46,6 +47,29 @@ function ultimaTasa() {
   const t = db().tasas
   return t[t.length - 1]
 }
+
+// Inventario (igual que en n8n): Detalle ventas descuenta; Inventario guarda entradas y ajustes.
+const MINIMO = 4
+const conStock = (p) => p.categoria === 'NY Cookies' || p.id === 'thin-40'
+function invDb() { const d = db(); d.inventario ??= []; d.detalle ??= []; return d }
+function stockActual() {
+  const d = invDb(); const s = {}
+  for (const m of d.inventario) s[m.id] = (s[m.id] || 0) + m.cantidad
+  for (const x of d.detalle) if (!x.anulado) s[x.id] = (s[x.id] || 0) - x.cantidad
+  return s
+}
+function stockBajo() {
+  const s = stockActual()
+  return db().productos.filter(conStock).filter((p) => (s[p.id] || 0) < MINIMO).map((p) => ({ id: p.id, nombre: etiquetaProducto(p), stock: s[p.id] || 0 }))
+}
+function registrarDetalle(items, fecha, registro) {
+  const d = invDb()
+  for (const it of items || []) {
+    const p = d.productos.find((x) => x.id === it.id)
+    if (p && it.cantidad > 0) d.detalle.push({ id: p.id, nombre: etiquetaProducto(p), cantidad: it.cantidad, fecha, registro, anulado: false })
+  }
+}
+const anularDetalle = (registro) => { for (const x of invDb().detalle) if (x.registro === registro) x.anulado = true }
 
 // Abonos: cada pago de una orden es una venta con su número de orden (igual que en n8n).
 const TOLERANCIA_USD = 0.5
@@ -144,6 +168,7 @@ export const mockApi = {
       ventas_usd: ventas, gastos_usd: gastos, ganancia_usd: round2(ventas - gastos),
       por_cobrar: { cantidad: pend.length, total_usd: totalOrdenesUsd(pend) },
       ultimos: movimientos.slice(0, 5),
+      inventario_bajo: stockBajo(),
       tasa: ultimaTasa(),
     }
   },
@@ -185,6 +210,7 @@ export const mockApi = {
     if (req.tipo === 'venta') {
       const v = { ...base, cliente: req.cliente, productos: req.productos, cantidad: req.cantidad, banco: req.banco, origen: 'webapp', orden: '', capture: req.capture ? '(capture de prueba)' : '' }
       d.ventas.push(v)
+      registrarDetalle(req.items, req.fecha, v.id)
       save()
       return { ok: true, id: v.id }
     }
@@ -196,6 +222,7 @@ export const mockApi = {
     }
     if (req.tipo === 'cobrar') {
       const orden = Math.max(0, ...d.porCobrar.map((o) => o.orden)) + 1
+      registrarDetalle(req.items, req.fecha_entrega, `O-${orden}`)
       d.porCobrar.push({ orden, fecha_entrega: req.fecha_entrega, cliente: req.cliente, productos: req.productos, monto: req.monto, moneda: 'USD', fecha_esperada_pago: req.fecha_esperada_pago, estado: 'pendiente', fecha_pago: '', referencia: '', registrado_por: u.nombre, creado: new Date().toISOString() })
       save()
       return { ok: true, orden }
@@ -250,12 +277,14 @@ export const mockApi = {
       if (!o || o.estado !== 'pendiente') throw new ApiError('Solo se pueden anular órdenes pendientes.', 400)
       if (pagadoUsd(o.orden) > 0) throw new ApiError('Esta orden tiene abonos. Anula primero esas ventas.', 400)
       o.estado = 'anulada'
+      anularDetalle(`O-${o.orden}`)
     } else {
       const list = tipo === 'venta' ? d.ventas : d.gastos
       const r = list.find((x) => x.id === id)
       if (!r) throw new ApiError('Registro no encontrado.', 404)
       if (r.anulado) throw new ApiError('Ese registro ya está anulado.', 400)
       r.anulado = true
+      anularDetalle(r.id)
       // Si era un abono, reabre la orden si lo cobrado ya no la cubre.
       const o = r.orden ? d.porCobrar.find((x) => x.orden === r.orden) : null
       if (o && o.estado === 'pagado') {
@@ -265,6 +294,41 @@ export const mockApi = {
     }
     save()
     return { ok: true }
+  },
+
+  async inventario() {
+    await wait(300)
+    usuarioActual()
+    const d = invDb(); const s = stockActual()
+    const productos = d.productos.filter(conStock).map((p) => ({ id: p.id, nombre: etiquetaProducto(p), sabor: p.nombre, presentacion: p.presentacion,
+      categoria: p.categoria, stock: s[p.id] || 0, minimo: MINIMO, bajo: (s[p.id] || 0) < MINIMO }))
+    const sem = {}
+    for (const x of d.detalle) {
+      if (x.anulado) continue
+      const lunes = rangoPeriodo('semana', x.fecha)[0]
+      const k = (sem[lunes] ??= {}); k[x.id] ??= { id: x.id, nombre: x.nombre, cantidad: 0 }; k[x.id].cantidad += x.cantidad
+    }
+    sem[rangoPeriodo('semana', hoyISO())[0]] ??= {}
+    const semanas = Object.keys(sem).sort().reverse().slice(0, 8).map((desde) => {
+      const ps = Object.values(sem[desde]).sort((a, b) => b.cantidad - a.cantidad)
+      return { desde, hasta: addDays(desde, 6), productos: ps, total: ps.reduce((t, p) => t + p.cantidad, 0) }
+    })
+    return { disponible: true, productos, semanas }
+  },
+
+  async inventarioMover(req) {
+    await wait(500)
+    const u = usuarioActual()
+    if (idempotente(req)) return { ok: true, repetido: true }
+    if (req.tipo === 'conteo' && u.rol !== 'admin') { vistos.delete(req.request_id); throw new ApiError('Solo un admin puede corregir el conteo.', 403) }
+    const d = invDb(); const s = stockActual(); let cambios = 0
+    for (const it of req.items || []) {
+      const cantidad = req.tipo === 'conteo' ? it.cantidad - (s[it.id] || 0) : it.cantidad
+      if (!cantidad) continue
+      d.inventario.push({ id: it.id, cantidad, tipo: req.tipo === 'conteo' ? 'ajuste' : 'entrada', nota: req.nota || '', fecha: hoyISO() }); cambios++
+    }
+    save()
+    return { ok: true, cambios }
   },
 
   async productos() {

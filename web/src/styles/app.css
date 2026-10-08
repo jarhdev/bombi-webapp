@@ -210,6 +210,26 @@ textarea.input { height: auto; min-height: 72px; padding: 10px 14px; resize: ver
 .prod-row .name strong { font-size: 15px; font-weight: 600; }
 .prod-row .name span { font-size: 13px; }
 .ny-steppers { display: flex; gap: 6px; }
+
+/* ---------- Inventario ---------- */
+.stock { display: flex; flex-direction: column; padding: 8px 16px; }
+.stock-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; padding: 4px 0 8px; border-bottom: 1px solid var(--line); }
+.stock-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; border-bottom: 1px solid var(--line); }
+.stock-row:last-child { border-bottom: none; }
+.stock-row strong { font-size: 15px; font-weight: 600; }
+.stock-pills { display: flex; gap: 6px; }
+.pill { min-width: 64px; display: inline-flex; align-items: baseline; justify-content: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--bg); font-size: 18px; font-weight: 800; }
+.pill small { font-size: 12px; font-weight: 600; }
+.pill.bajo { background: var(--accent); color: var(--on-dark); }
+.vendidos { display: flex; flex-direction: column; padding: 6px 16px; }
+.vend-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.vend-row:last-child { border-bottom: none; }
+.vend-row.total { font-weight: 800; }
+.bottom-bar.stack { display: flex; flex-direction: column; gap: 8px; }
+.conteo { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 74px; }
+.conteo small { font-size: 12px; font-weight: 600; }
+.conteo .input { text-align: center; padding: 8px 4px; font-size: 18px; font-weight: 700; }
+.link-card.alerta .badge { background: var(--accent); color: var(--on-dark); }
 .stepper { display: flex; align-items: center; border-radius: 22px; background: var(--bg); }
 .stepper.on { background: var(--ink); color: var(--on-dark); }
 .stepper button { width: 40px; height: 44px; border: none; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; }

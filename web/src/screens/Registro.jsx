@@ -110,10 +110,12 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
     setError(null)
     setGuardando(true)
     const productosTxt = textoProductos(f.cantidades, productos)
+    // Productos exactos del selector: el inventario y "vendidos por semana" se calculan con esto.
+    const items = Object.entries(f.cantidades).filter(([, n]) => n > 0).map(([id, cantidad]) => ({ id, cantidad }))
     const req = esCobrar
       ? {
           tipo, request_id: requestId.current, cliente: f.cliente.trim(), productos: productosTxt,
-          monto: montoNum, moneda: 'USD', fecha_entrega: f.fecha, fecha_esperada_pago: f.fechaCobro,
+          monto: montoNum, moneda: 'USD', fecha_entrega: f.fecha, fecha_esperada_pago: f.fechaCobro, items,
         }
       : {
           tipo, request_id: requestId.current, fecha: f.fecha, monto: montoNum, moneda, tasa: moneda === 'Bs' ? tasa : tasaDia?.tasa || 0,
@@ -121,7 +123,7 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
           metodo: f.metodo, referencia: f.referencia.trim(),
           capture: f.capture?.blob || null, confirmar_duplicado: confirmarDuplicado,
           ...(tipo === 'venta'
-            ? { cliente: f.cliente.trim(), productos: productosTxt, cantidad: cantidadTotal, banco: f.banco.trim() }
+            ? { cliente: f.cliente.trim(), productos: productosTxt, cantidad: cantidadTotal, banco: f.banco.trim(), items }
             : { categoria: f.categoria, concepto: f.concepto.trim(), proveedor: f.proveedor.trim() }),
         }
     try {

@@ -6,6 +6,7 @@ import { Toast, Spinner } from './components/ui.jsx'
 import Resumen from './screens/Resumen.jsx'
 import Registro from './screens/Registro.jsx'
 import PorCobrar from './screens/PorCobrar.jsx'
+import Inventario from './screens/Inventario.jsx'
 import Ajustes, { Productos, Tasa, Usuarios } from './screens/Ajustes.jsx'
 import { Login, Mensaje } from './screens/Login.jsx'
 
@@ -74,6 +75,7 @@ export default function App() {
     switch (actual.name) {
       case 'registro': contenido = <Registro key={pila.length} {...comun} tipoInicial={p.tipo} productos={productos} />; break
       case 'cobrar': contenido = <PorCobrar {...comun} />; break
+      case 'inventario': contenido = <Inventario {...comun} />; break
       case 'ajustes': contenido = <Ajustes {...comun} logout={logout} />; break
       case 'usuarios': contenido = u.rol === 'admin' ? <Usuarios {...comun} /> : null; break
       case 'productos': contenido = u.rol === 'admin' ? <Productos {...comun} productos={productos} onSaved={setProductos} /> : null; break

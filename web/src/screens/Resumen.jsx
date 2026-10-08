@@ -82,6 +82,20 @@ export default function Resumen({ usuario, go, notify }) {
           <Icon name="chevron" size={20} />
         </button>
 
+        <button className={`link-card${data?.inventario_bajo?.length ? ' alerta' : ''}`} onClick={() => go('inventario')}>
+          <span className="badge"><Icon name={data?.inventario_bajo?.length ? 'alert' : 'box'} /></span>
+          <span className="txt">
+            <strong>Inventario</strong>
+            <span>
+              {!data ? 'Cargando…'
+                : data.inventario_bajo?.length
+                  ? `Poco stock: ${data.inventario_bajo.slice(0, 3).map((p) => `${p.nombre} (${p.stock})`).join(', ')}${data.inventario_bajo.length > 3 ? '…' : ''}`
+                  : 'Galletas sin hornear y vendidos por semana'}
+            </span>
+          </span>
+          <Icon name="chevron" size={20} />
+        </button>
+
         <h2 className="section-title">Registrar</h2>
         <div className="quick">
           <button className="dark" onClick={() => go('registro', { tipo: 'venta' })}><Icon name="up" size={24} />Venta</button>

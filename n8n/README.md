@@ -38,3 +38,16 @@ Google Sheets account (OAuth), Google Drive account (OAuth), Telegram account (e
 ## Columnas que usa la API
 
 - `Por cobrar` → `Request id` (columna S): evita crear la misma orden dos veces si se toca Guardar dos veces. Si la columna no existe, la orden se guarda igual, sin esa protección.
+
+## Inventario (2026-10-08)
+
+Pestañas nuevas en el Sheet:
+
+- `Inventario`: entradas (galletas sin hornear que se preparan) y ajustes por conteo real. Una fila por producto.
+- `Detalle ventas`: una fila por producto de cada venta u orden registrada en la app (`Registro` = ID de la venta u `O-<n>` de la orden). Las filas con `Descuenta inventario = sí` restan del stock; el historial cargado a mano usa `no`.
+- `Stock`: fórmulas que calculan el stock de cada producto con `Stock mínimo` (columna G de Productos).
+- `Vendidos por semana`: tabla dinámica (QUERY) de `Detalle ventas` por semana (lunes) y producto, sin anulados.
+
+Rutas de la API: `inventario` (stock + vendidos por semana) e `inventario-mover` (`tipo: entrada` para todos, `tipo: conteo` solo admin).
+Cuando una venta, orden o conteo hace que un producto baje de su mínimo, se avisa una vez por Telegram a los admins.
+El Sheet usa configuración regional es_VE: las fórmulas escritas por API van con punto y coma.

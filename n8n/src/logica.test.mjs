@@ -235,3 +235,56 @@ test('últimos registros: por momento de registro, con la fecha del pago aparte'
   assert.equal(res.ultimos[0].id, 'V-261007-140245')
   assert.equal(res.ultimos[0].fecha, '2026-10-06'); assert.equal(res.ultimos[0].registrado, '2026-10-07')
 })
+
+function conInventario(lectura) {
+  const prod = lectura.valueRanges.find((v) => v.range.startsWith('Productos')).values
+  for (const r of [['ny-nutella-100', 'NY Nutella', 'NY Cookies', '100g', 2.5, 'sí'], ['brownie-150', 'Brownie', 'Otros', '150g', 2.5, 'sí']])
+    if (!prod.some((x) => x[0] === r[0])) prod.push(r)
+  prod[0][6] = 'Stock mínimo'
+  for (const r of prod.slice(1)) r[6] = /^ny-|^thin/.test(r[0]) ? 4 : ''
+  lectura.valueRanges.push({ range: 'Inventario!A1:I1000', values: [['Fecha', 'Hora', 'Producto id', 'Producto', 'Movimiento', 'Cantidad', 'Nota', 'Registrado por', 'Request id']] })
+  lectura.valueRanges.push({ range: "'Detalle ventas'!A1:J2000", values: [['Fecha', 'Semana (lunes)', 'Producto id', 'Producto', 'Cantidad', 'Tipo', 'Registro', 'Anulado', 'Descuenta inventario', 'Origen']] })
+  return lectura
+}
+const hoja = (l, n) => l.valueRanges.find((v) => v.range.replace(/'/g, '').startsWith(n)).values
+// Aplica las escrituras "append" a la lectura simulada, como si ya estuvieran en el Sheet.
+function aplicar(l, r) { for (const e of r.escrituras) if (e.tipo === 'append') hoja(l, e.hoja).push(e.fila) }
+
+test('inventario: entrada, venta que descuenta y avisa al bajar de 4, conteo y anulación', () => {
+  const t = login()
+  const l = conInventario(conPin(fixture(), 'Jose', '1234'))
+  const nutella = (n) => ({ id: 'ny-nutella-100', cantidad: n })
+  // Entrada de 6 galletas.
+  const e = llamar('inventario-mover', { tipo: 'entrada', items: [nutella(6), { id: 'brownie-150', cantidad: 3 }], request_id: 'e1' }, { token: t, lectura: l })
+  assert.equal(e.status, 200, JSON.stringify(e.respuesta)); assert.equal(e.escrituras.length, 1) // el brownie no lleva inventario
+  aplicar(l, e)
+  let inv = llamar('inventario', {}, { token: t, lectura: l }).respuesta
+  assert.equal(inv.productos.find((p) => p.id === 'ny-nutella-100').stock, 6)
+  // Venta de 3 Nutella 100g + 1 Brownie: descuenta y avisa (6 → 3, cruza el mínimo 4).
+  const b = { tipo: 'venta', monto: 10, moneda: 'USD', metodo: 'Zelle', referencia: 'INV1', request_id: 'v-inv',
+    productos: '3x NY Nutella 100g, 1x Brownie 150g', items: [nutella(3), { id: 'brownie-150', cantidad: 1 }, { id: 'no-existe', cantidad: 2 }] }
+  const v = llamar('registro', b, { token: t, lectura: l })
+  const det = v.escrituras.filter((x) => x.hoja === 'Detalle ventas')
+  assert.equal(det.length, 2); assert.equal(det[0].fila[1], '2026-10-05') // semana del lunes 5
+  assert.equal(v.avisos.length, 2); assert.match(v.avisos[0].texto, /NY Nutella 100g: quedan 3/)
+  aplicar(l, v)
+  inv = llamar('inventario', {}, { token: t, lectura: l }).respuesta
+  assert.equal(inv.productos.find((p) => p.id === 'ny-nutella-100').stock, 3)
+  assert.equal(inv.semanas[0].desde, '2026-10-05'); assert.equal(inv.semanas[0].total, 4)
+  assert.ok(llamar('resumen', { periodo: 'hoy' }, { token: t, lectura: l }).respuesta.inventario_bajo.some((p) => p.id === 'ny-nutella-100'))
+  // Orden por cobrar también descuenta, con registro O-n.
+  const o = llamar('registro', { tipo: 'cobrar', cliente: 'PuroLomo', productos: '1x NY Nutella 100g', monto: 2.5, items: [nutella(1)], request_id: 'o-inv' }, { token: t, lectura: l })
+  assert.equal(o.escrituras.find((x) => x.hoja === 'Detalle ventas').fila[6], 'O-3')
+  assert.equal(o.avisos.length, 0) // ya estaba por debajo: no repite el aviso
+  // Anular la venta marca su detalle como anulado.
+  const vid = v.respuesta.id
+  const an = llamar('anular', { tipo: 'venta', id: vid }, { token: t, lectura: l })
+  assert.equal(an.escrituras.filter((x) => /^'Detalle ventas'!H/.test(x.rango)).length, 2)
+  // Conteo real (solo admin): escribe la diferencia como ajuste.
+  const c = llamar('inventario-mover', { tipo: 'conteo', items: [{ id: 'ny-nutella-100', cantidad: 10 }], request_id: 'c1' }, { token: t, lectura: l })
+  assert.equal(c.escrituras[0].fila[4], 'ajuste'); assert.equal(c.escrituras[0].fila[5], 7)
+  const tv = login('Victor')
+  assert.equal(llamar('inventario-mover', { tipo: 'conteo', items: [nutella(1)] }, { token: tv, lectura: l }).status, 403)
+  // Sin las pestañas nuevas, la venta se guarda igual.
+  assert.equal(llamar('registro', { ...b, request_id: 'v-sin', referencia: 'INV2' }, { token: t }).status, 200)
+})
