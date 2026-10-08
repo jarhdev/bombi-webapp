@@ -288,3 +288,25 @@ test('inventario: entrada, venta que descuenta y avisa al bajar de 4, conteo y a
   // Sin las pestañas nuevas, la venta se guarda igual.
   assert.equal(llamar('registro', { ...b, request_id: 'v-sin', referencia: 'INV2' }, { token: t }).status, 200)
 })
+
+test('inventario: cobrar una orden (completa o en abonos) no vuelve a descontar ni a sumar en vendidos', () => {
+  const t = login()
+  const l = conInventario(conPin(fixture(), 'Jose', '1234'))
+  aplicar(l, llamar('inventario-mover', { tipo: 'entrada', items: [{ id: 'ny-nutella-100', cantidad: 10 }], request_id: 'e2' }, { token: t, lectura: l }))
+  const o = llamar('registro', { tipo: 'cobrar', cliente: 'PuroLomo', productos: '4x NY Nutella 100g', monto: 10, items: [{ id: 'ny-nutella-100', cantidad: 4 }], request_id: 'o-pl' }, { token: t, lectura: l })
+  aplicar(l, o)
+  const n = o.respuesta.orden
+  hoja(l, "Por cobrar").push([n, 46303, 'PuroLomo', '4x NY Nutella 100g', 10, 'USD', 46304, 'pendiente'])
+  let inv = llamar('inventario', {}, { token: t, lectura: l }).respuesta
+  assert.equal(inv.productos.find((p) => p.id === 'ny-nutella-100').stock, 6)
+  // Abono de $4 y luego el resto: ninguno escribe en Detalle ventas.
+  for (const [monto, rid] of [[4, 'ab1'], [6, 'ab2']]) {
+    const c = llamar('cobrar', { orden: n, monto, moneda: 'USD', tasa: 873.87, metodo: 'Zelle', referencia: rid, request_id: rid }, { token: t, lectura: l })
+    assert.equal(c.status, 200, JSON.stringify(c.respuesta))
+    assert.equal(c.escrituras.filter((x) => x.hoja === 'Detalle ventas').length, 0)
+    aplicar(l, c)
+  }
+  inv = llamar('inventario', {}, { token: t, lectura: l }).respuesta
+  assert.equal(inv.productos.find((p) => p.id === 'ny-nutella-100').stock, 6)
+  assert.equal(inv.semanas[0].total, 4)
+})
