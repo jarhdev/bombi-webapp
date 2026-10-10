@@ -2,10 +2,10 @@
 
 Este documento explica cómo funciona el agente de pedidos de Bombi que atiende a los clientes por WhatsApp.
 
-- **Workflow en n8n:** `Bombi IA Agent WAHA` (id `VHxB8NIeORzMPqf6`, activo)
+- **Workflow en n8n:** `Bombi IA Agent WAHA` (activo)
 - **Archivo exportado:** [`bombi-ia-agent-waha.json`](./bombi-ia-agent-waha.json). Se importa en n8n con *Workflows → Import from File*.
 
-> Existe también `Bombi IA Agent` (id `jp1JdpGIn9qdvYDJ`), una versión anterior que está **inactiva**. La que corre en producción es la de WAHA.
+> Existe también `Bombi IA Agent`, una versión anterior que está **inactiva**. La que corre en producción es la de WAHA.
 
 ---
 
@@ -36,7 +36,7 @@ Este documento explica cómo funciona el agente de pedidos de Bombi que atiende 
                                WAHA ─► WhatsApp ─► Cliente
 ```
 
-WAHA y n8n corren en la misma máquina (`jose-laptop`). n8n queda expuesto por **Tailscale** en `https://jose-laptop.taila03abc.ts.net`, y por eso n8n le responde a WAHA en `localhost:3000`.
+WAHA y n8n corren en la misma máquina (una laptop). n8n queda expuesto por **Tailscale** en `https://[TU-HOST-N8N]`, y por eso n8n le responde a WAHA en `localhost:3000`.
 
 ---
 
@@ -45,8 +45,8 @@ WAHA y n8n corren en la misma máquina (`jose-laptop`). n8n queda expuesto por *
 ### Entrada: WhatsApp → WAHA → n8n
 1. WAHA mantiene una sesión de WhatsApp Web llamada `default`, vinculada al número de Bombi con un código QR.
 2. En la sesión de WAHA está configurado un **webhook** que apunta a n8n:
-   - Producción: `https://jose-laptop.taila03abc.ts.net/webhook/waha`
-   - Pruebas: `https://jose-laptop.taila03abc.ts.net/webhook-test/waha`
+   - Producción: `https://[TU-HOST-N8N]/webhook/waha`
+   - Pruebas: `https://[TU-HOST-N8N]/webhook-test/waha`
    - Evento suscrito: `message`
 3. Cada mensaje que llega al número genera un `POST` con un cuerpo parecido a este:
    ```json
@@ -86,7 +86,7 @@ El último nodo (`HTTP Request`) llama a la API REST de WAHA:
 | 3a | **Google Gemini Chat Model** | Modelo principal | `models/gemini-3.5-flash` |
 | 3b | **OpenRouter Chat Model** | Modelo de respaldo | `google/gemma-4-31b-it:free`. Se usa si Gemini falla (`needsFallback: true`). |
 | 3c | **Simple Memory** | Buffer Window Memory | Guarda el historial de la conversación **por número de WhatsApp** (`sessionKey = payload.from`). Así cada cliente tiene su propio contexto. |
-| 3d | **avisar_jose** | Tool · Send Email (SMTP) | Envía un correo a `joserh9703@gmail.com` y `bombive@gmail.com` con asunto *"Bombi - Atencion WhatsApp"*. El texto lo redacta la IA (`$fromAI('mensaje')`). |
+| 3d | **avisar_jose** | Tool · Send Email (SMTP) | Envía un correo a `[CORREO_ALERTAS_1]` y `[CORREO_ALERTAS_2]` con asunto *"Bombi - Atencion WhatsApp"*. El texto lo redacta la IA (`$fromAI('mensaje')`). |
 | 3e | **registrar_pedido** | Tool · Data Table | Inserta el pedido en la Data Table `pedidos_bombi` con las columnas `nombre, productos, entrega, direccion, total, metodo_pago` (las llena la IA) y `estado = "pendiente de pago"`. |
 | 4 | **HTTP Request** | `httpRequest` | Envía la respuesta al cliente por WAHA (`/api/sendText`). |
 
@@ -146,9 +146,9 @@ Eres el asistente de pedidos de Bombi, un emprendimiento de galletas y brownies 
 
 ## Métodos de pago
 Pago móvil, Zelle, Binance y efectivo. Usa solo estos datos, no inventes ninguno:
-- *Pago móvil:* Banco Provincial (0108), teléfono 0422-5764906, cédula 26055925
-- *Zelle:* Laurafspd@gmail.com, titular: Laura Flores
-- *Binance Pay:* ID 172173482 o correo joserh1403@gmail.com
+- *Pago móvil:* Banco [BANCO] ([CÓDIGO]), teléfono [TELÉFONO], cédula [CÉDULA]
+- *Zelle:* [CORREO_ZELLE], titular: [TITULAR]
+- *Binance Pay:* ID [BINANCE_ID] o correo [CORREO_BINANCE]
 - *Efectivo:* se paga al retirar (pickup) o al recibir (delivery).
 
 Todos los montos van en dólares. Nunca calcules ni des montos en bolívares.
@@ -214,7 +214,7 @@ Entrega: [dirección o Pickup en La Mantuana]
 3. El agente carga el historial de ese número desde `Simple Memory`, responde con Gemini y n8n lo envía por `/api/sendText`.
 4. La conversación sigue mensaje a mensaje (cada uno es una ejecución nueva del workflow; la memoria mantiene el contexto) hasta que el agente muestra el resumen.
 5. El cliente confirma. El agente debería llamar `registrar_pedido` (hoy no puede, ver la sección 3) y envía los datos del método de pago elegido.
-6. El cliente manda el comprobante. El agente llama `avisar_jose`, llega un correo a Jose y bombive@gmail.com, y Jose verifica el pago y toma el control.
+6. El cliente manda el comprobante. El agente llama `avisar_jose`, llega un correo a los correos de alertas, y Jose verifica el pago y toma el control.
 
 ---
 
