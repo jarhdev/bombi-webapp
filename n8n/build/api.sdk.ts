@@ -9,7 +9,7 @@ const config = node({ type: 'n8n-nodes-base.dataTable', version: 1.1, config: { 
   output: [{ clave: 'sheet_id', valor: 'abc' }] });
 
 const hojas = node({ type: 'n8n-nodes-base.httpRequest', version: 4.2, config: { name: 'Leer hojas', executeOnce: true, retryOnFail: true, maxTries: 3, onError: 'continueRegularOutput',
-  parameters: { url: expr("https://sheets.googleapis.com/v4/spreadsheets/{{ $('Leer config').all().find(i => i.json.clave === 'sheet_id').json.valor }}/values:batchGet?ranges=Usuarios!A%3AJ&ranges=Ventas!A%3AT&ranges=Gastos!A%3AR&ranges='Por%20cobrar'!A%3AS&ranges=Productos!A%3AF&ranges=Tasas!A%3AD&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER"),
+  parameters: { url: expr("https://sheets.googleapis.com/v4/spreadsheets/{{ $('Leer config').all().find(i => i.json.clave === 'sheet_id').json.valor }}/values:batchGet?ranges=Usuarios!A%3AJ&ranges=Ventas!A%3AV&ranges=Gastos!A%3AR&ranges='Por%20cobrar'!A%3AU&ranges=Productos!A%3AH&ranges=Tasas!A%3AD&ranges=Inventario!A%3AI&ranges='Detalle%20ventas'!A%3AK&ranges=Aliados!A%3AD&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER"),
     authentication: 'predefinedCredentialType', nodeCredentialType: 'googleSheetsOAuth2Api', options: { timeout: 20000 } }, credentials: { googleSheetsOAuth2Api: { id: 'd9JzMLg0lUmByTRr', name: 'Google Sheets account' } } },
   output: [{ valueRanges: [] }] });
 

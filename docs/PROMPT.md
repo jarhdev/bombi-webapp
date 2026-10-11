@@ -75,7 +75,7 @@ La app llama a `/api/<ruta>`; Netlify lo reenvía a `<N8N_API_URL>/<ruta>` (toda
 | `por-cobrar` | — | `{ ordenes: [{..., monto_usd, pagado_usd, saldo_usd}], total_usd (saldo), hay_bs, proximo_numero }` |
 | `cobrar` | multipart `data` + `capture` | `{ ok, id, cerrada, pagado_usd, saldo_usd }`; `409 { duplicado }`. Cada cobro es un abono: la orden se cierra cuando lo cobrado cubre el monto (±$0,50). |
 | `anular` (admin) | `{ tipo, id }` | `{ ok }` |
-| `productos` / `productos-guardar` (admin) | — / `{ productos: [...] }` | `{ productos }` / `{ ok }` |
+| `productos` / `productos-guardar` (admin) | — / `{ productos: [...] }` (con `precio_aliado`) | `{ productos, aliados }` / `{ ok }` |
 | `usuarios` / `usuarios-accion` (admin) | — / `{ accion: crear\|aprobar\|activar\|desactivar\|cambiar_pin\|cambiar_rol, ... }` | `{ usuarios }` / `{ ok }` |
 
 El modo demo (`web/src/mocks/mockApi.js`) implementa exactamente este contrato y sirve de referencia para los workflows.

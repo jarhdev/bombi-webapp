@@ -26,6 +26,11 @@ export default function Ajustes({ usuario, back, go, logout }) {
             </button>
           </nav>
         )}
+        <nav className="menu-list" aria-label="Consultas">
+          <button onClick={() => go('precios')}>
+            <Icon name="box" /><span className="txt"><strong>Lista de precios</strong><span>Precio para clientes y para aliados</span></span><Icon name="chevron" size={20} />
+          </button>
+        </nav>
         <div className="card">
           <strong>{usuario.nombre}</strong> · {esAdmin ? 'Admin' : 'Usuario'}
         </div>
@@ -152,14 +157,17 @@ function UsuarioSheet({ u, yo, onClose, onAccion }) {
 
 // ---------------- Productos ----------------
 export function Productos({ back, notify, productos, onSaved }) {
-  const [lista, setLista] = useState(() => productos.map((p) => ({ ...p, precioTxt: montoInput(p.precio) })))
+  const [lista, setLista] = useState(() => productos.map((p) => ({ ...p, precioTxt: montoInput(p.precio), aliadoTxt: p.precio_aliado > 0 ? montoInput(p.precio_aliado) : '' })))
   const [guardando, setGuardando] = useState(false)
   const cambiar = (id, patch) => setLista((l) => l.map((p) => (p.id === id ? { ...p, ...patch } : p)))
-  const sucio = lista.some((p, i) => p.activo !== productos[i]?.activo || parseMonto(p.precioTxt) !== productos[i]?.precio)
+  const aliadoDe = (txt) => (String(txt).trim() === '' ? null : parseMonto(txt))
+  const sucio = lista.some((p, i) => p.activo !== productos[i]?.activo || parseMonto(p.precioTxt) !== productos[i]?.precio
+    || aliadoDe(p.aliadoTxt) !== (productos[i]?.precio_aliado > 0 ? productos[i].precio_aliado : null))
 
   async function guardar() {
-    const nuevos = lista.map(({ precioTxt, ...p }) => ({ ...p, precio: parseMonto(precioTxt) }))
+    const nuevos = lista.map(({ precioTxt, aliadoTxt, ...p }) => ({ ...p, precio: parseMonto(precioTxt), precio_aliado: aliadoDe(aliadoTxt) }))
     if (nuevos.some((p) => !(p.precio > 0))) return notify('Hay un precio vacío o en cero.', true)
+    if (nuevos.some((p) => p.precio_aliado !== null && !(p.precio_aliado > 0))) return notify('Hay un precio aliado inválido (déjalo vacío para usar el normal).', true)
     setGuardando(true)
     try {
       await api.guardarProductos({ productos: nuevos })
@@ -179,7 +187,8 @@ export function Productos({ back, notify, productos, onSaved }) {
     <div className="screen">
       <TopBar title="Productos" onBack={back} />
       <main className="screen-body">
-        <p className="hint">También puedes editarlos en la pestaña Productos del Google Sheets; la app los lee de ahí.</p>
+        <p className="hint">También puedes editarlos en la pestaña Productos del Google Sheets; la app los lee de ahí. Precio aliado vacío = se usa el precio normal.</p>
+        <div className="precio-enc" aria-hidden="true"><span>Cliente</span><span>Aliado</span><span /></div>
         {grupos.map((g) => (
           <div className="prod-box" key={g}>
             <div className="prod-group">{g}</div>
@@ -192,6 +201,9 @@ export function Productos({ back, notify, productos, onSaved }) {
                 <label className="sr-only" htmlFor={`precio-${p.id}`}>Precio de {p.nombre} {p.presentacion}</label>
                 <input id={`precio-${p.id}`} className="input price-input" inputMode="decimal" value={p.precioTxt}
                   onChange={(e) => cambiar(p.id, { precioTxt: e.target.value })} />
+                <label className="sr-only" htmlFor={`aliado-${p.id}`}>Precio aliado de {p.nombre} {p.presentacion}</label>
+                <input id={`aliado-${p.id}`} className="input price-input" inputMode="decimal" placeholder="—" value={p.aliadoTxt}
+                  onChange={(e) => cambiar(p.id, { aliadoTxt: e.target.value })} />
                 <button className="switch" role="switch" aria-checked={p.activo} aria-label={`${p.nombre} ${p.presentacion} activo`}
                   onClick={() => cambiar(p.id, { activo: !p.activo })} />
               </div>
@@ -204,6 +216,32 @@ export function Productos({ back, notify, productos, onSaved }) {
           {guardando ? 'Guardando…' : 'Guardar cambios'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ---------------- Lista de precios (todos los usuarios) ----------------
+export function Precios({ back, productos }) {
+  const activos = productos.filter((p) => p.activo)
+  const grupos = [...new Set(activos.map((p) => p.categoria))]
+  return (
+    <div className="screen">
+      <TopBar title="Lista de precios" onBack={back} />
+      <main className="screen-body">
+        <p className="hint">Precio aliado: el que se cobra a los aliados (igual para todos). Al registrar una venta u orden elige “Aliado” y la app lo usa sola.</p>
+        {grupos.map((g) => (
+          <div className="prod-box" key={g}>
+            <div className="prod-group precio-cols"><span>{g}</span><span>Cliente</span><span>Aliado</span></div>
+            {activos.filter((p) => p.categoria === g).map((p) => (
+              <div className="prod-row precio-cols" key={p.id}>
+                <div className="name"><strong>{p.nombre}</strong><span>{p.presentacion}</span></div>
+                <span className="precio">{formatUsd(p.precio)}</span>
+                <span className="precio aliado">{p.precio_aliado > 0 ? formatUsd(p.precio_aliado) : '—'}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </main>
     </div>
   )
 }

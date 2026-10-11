@@ -311,3 +311,17 @@ textarea.input { height: auto; min-height: 72px; padding: 10px 14px; resize: ver
 .big-rate { font-size: 40px; font-weight: 800; line-height: 1; color: var(--accent); }
 .center-msg { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 32px 24px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Aliados: lista de precios y precio aliado */
+.precio-enc { display: flex; justify-content: flex-end; gap: 6px; padding-right: 6px; margin-bottom: -6px; font-size: 12px; font-weight: 700; color: var(--accent); }
+.precio-enc span { width: 76px; text-align: center; }
+.precio-enc span:last-child { width: 52px; }
+.prod-box .price-input { width: 76px; }
+.precio-cols .precio { width: 64px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.precio-cols .precio.aliado { color: var(--accent); }
+.prod-group.precio-cols { display: flex; gap: 6px; padding-right: 8px; }
+.prod-group.precio-cols span:first-child { flex: 1; }
+.prod-group.precio-cols span:not(:first-child) { width: 64px; text-align: right; }
+.prod-row.precio-cols { padding-right: 8px; }
+.tag-aliado { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; vertical-align: 2px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }

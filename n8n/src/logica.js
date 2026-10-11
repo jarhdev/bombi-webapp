@@ -175,7 +175,7 @@ function venta(f) {
   return { id: txt(f.ID), fecha: fechaCelda(f.Fecha), hora: horaCelda(f.Hora), fila: f._fila, anulado: esSi(f.Anulado),
     monto: num(f.Monto), moneda: txt(f.Moneda) || 'Bs', monto_usd: r2(f['Monto USD']), referencia: txt(f.Referencia).replace(/^'/, ''),
     cliente: txt(f.Cliente), producto: txt(f.Producto), metodo: txt(f['Método']), quien: txt(f['Registrado por']),
-    origen: txt(f.Origen), orden: txt(f.Orden), request_id: txt(f['Request id']) };
+    origen: txt(f.Origen), orden: txt(f.Orden), request_id: txt(f['Request id']), aliado: txt(f.Aliado) };
 }
 function gasto(f) {
   return { id: txt(f.ID), fecha: fechaCelda(f.Fecha), hora: horaCelda(f.Hora), fila: f._fila, anulado: esSi(f.Anulado),
@@ -201,7 +201,7 @@ function orden(f, tasa, abonos = {}) {
   const pagado = abonos[num(f.Orden)] || 0;
   return { orden: num(f.Orden), fila: f._fila, fecha_entrega: fechaCelda(f['Fecha entrega']), cliente: txt(f.Cliente),
     productos: txt(f.Productos), monto, moneda, fecha_esperada_pago: fechaCelda(f['Fecha esperada pago']),
-    estado: sinAcentos(f.Estado) || 'pendiente', monto_usd: montoUsd,
+    estado: sinAcentos(f.Estado) || 'pendiente', monto_usd: montoUsd, aliado: txt(f.Aliado),
     pagado_usd: pagado, saldo_usd: montoUsd > 0 ? r2(Math.max(0, montoUsd - pagado)) : 0 };
 }
 
@@ -226,11 +226,11 @@ function resumen(ctx, h, res) {
   };
   const movs = [
     ...V.map((v) => ({ id: v.id, tipo: 'venta', fecha: v.fecha, ...alta(v), anulado: v.anulado,
-      titulo: v.orden ? `Venta · Orden #${v.orden}` : `Venta · ${v.metodo || 'sin método'}`, detalle: [v.cliente || v.producto, bot(v)].filter(Boolean).join(' · '), monto_usd: v.monto_usd })),
+      titulo: v.orden ? `Venta · Orden #${v.orden}` : `Venta${v.aliado ? ' aliado' : ''} · ${v.metodo || 'sin método'}`, detalle: [v.cliente || v.producto, bot(v)].filter(Boolean).join(' · '), monto_usd: v.monto_usd })),
     ...G.map((g) => ({ id: g.id, tipo: 'gasto', fecha: g.fecha, ...alta(g), anulado: g.anulado,
       titulo: `Gasto · ${g.categoria || 'Otros'}`, detalle: [g.concepto, bot(g)].filter(Boolean).join(' · '), monto_usd: g.monto_usd })),
     ...O.map((o) => ({ id: `o${o.orden}`, tipo: 'cobrar', fecha: o.fecha_entrega, registrado: o.fecha_entrega, k: `${o.fecha_entrega} 00:00:00 ${String(o.fila).padStart(6, '0')}`, anulado: o.estado === 'anulada',
-      titulo: `Orden #${o.orden} · ${o.cliente}`, detalle: o.estado === 'pagado' ? 'Cobrada' : o.pagado_usd > 0 ? `Abonado $${o.pagado_usd.toFixed(2)} · faltan $${o.saldo_usd.toFixed(2)}` : 'Pendiente de cobro', monto_usd: o.monto_usd })),
+      titulo: `Orden #${o.orden} · ${o.cliente}${o.aliado && o.aliado !== o.cliente ? ` (${o.aliado})` : ''}`, detalle: o.estado === 'pagado' ? 'Cobrada' : o.pagado_usd > 0 ? `Abonado $${o.pagado_usd.toFixed(2)} · faltan $${o.saldo_usd.toFixed(2)}` : 'Pendiente de cobro', monto_usd: o.monto_usd })),
   ].sort((a, b) => b.k.localeCompare(a.k)).slice(0, 5).map(({ k, ...m }) => m);
   return res(200, { desde, hasta, ventas_usd: ventas, gastos_usd: gastos, ganancia_usd: r2(ventas - gastos),
     por_cobrar: { cantidad: pend.length, total_usd: r2(pend.reduce((s, o) => s + (o.monto_usd > 0 ? o.saldo_usd : 0), 0)) }, ultimos: movs, tasa, inventario_bajo: stockBajo(h) });
@@ -270,21 +270,42 @@ function montos(b, tasaDia) {
 }
 function fechaValida(f, hoy) { const s = fechaCelda(f); return s || hoy; }
 
+// ---------- Aliados ----------
+// Los aliados compran a "Precio aliado" (Productos). Sus ventas y órdenes van en las mismas pestañas,
+// marcadas en las columnas Canal / Aliado (al final), y "Resumen aliados" las suma por aliado.
+const aliadosActivos = (h) => hojaOpc(h, 'Aliados').filas.filter((f) => txt(f.Nombre) && (txt(f.Activo) === '' || esSi(f.Activo))).map((f) => txt(f.Nombre));
+function canalDe(h, b) {
+  if (b.canal !== 'aliado') return { canal: 'regular', aliado: '' };
+  if (!h.Aliados) throw new Fallo(503, 'Falta la pestaña Aliados en el Sheet.');
+  const nombre = aliadosActivos(h).find((n) => sinAcentos(n) === sinAcentos(b.aliado));
+  if (!nombre) throw new Fallo(400, 'Elige un aliado de la lista.');
+  return { canal: 'aliado', aliado: nombre };
+}
+// Solo escribe las columnas que existan en la hoja (el bot y hojas viejas no las tienen).
+function colsCanal(t, cn) {
+  const o = {};
+  if (t.enc.includes('Canal')) o.Canal = cn.canal;
+  if (t.enc.includes('Aliado')) o.Aliado = cn.aliado ? seguro(cn.aliado) : '';
+  return o;
+}
+
 function registro(ctx, h, res, u) {
   const b = ctx.body; const ahora = ctx.ahora; const c = caracas(ahora);
   if (b.tipo === 'cobrar') {
     const P = h['Por cobrar'];
     const monto = r2(b.monto);
     if (!(monto > 0)) throw new Fallo(400, 'El monto debe ser mayor que cero.');
-    if (!txt(b.cliente)) throw new Fallo(400, 'Escribe la empresa.');
+    const cn = canalDe(h, b);
+    const cliente = txt(b.cliente) || cn.aliado;
+    if (!cliente) throw new Fallo(400, 'Escribe la empresa.');
     if (yaProcesado(h, b.request_id)) return res(200, { ok: true, repetido: true });
     const n = Math.max(0, ...P.filas.map((f) => num(f.Orden))) + 1;
     const entrega = fechaValida(b.fecha_entrega, c.fecha);
     res.escrituras.push({ tipo: 'append', hoja: 'Por cobrar', fila: filaPara(P, {
-      Orden: n, 'Fecha entrega': entrega, Cliente: seguro(b.cliente), Productos: seguro(b.productos), Monto: monto, Moneda: 'USD',
+      Orden: n, 'Fecha entrega': entrega, Cliente: seguro(cliente), Productos: seguro(b.productos), Monto: monto, Moneda: 'USD',
       'Fecha esperada pago': fechaCelda(b.fecha_esperada_pago) || viernesSiguiente(entrega), Estado: 'pendiente',
-      'Registrado por': u.nombre, Origen: 'webapp', ...(P.enc.includes('Request id') ? { 'Request id': txt(b.request_id) } : {}) }) });
-    registrarDetalle(h, res, itemsValidos(h, b.items), { fecha: entrega, tipo: 'orden', registro: `O-${n}` });
+      'Registrado por': u.nombre, Origen: 'webapp', ...(P.enc.includes('Request id') ? { 'Request id': txt(b.request_id) } : {}), ...colsCanal(P, cn) }) });
+    registrarDetalle(h, res, itemsValidos(h, b.items), { fecha: entrega, tipo: 'orden', registro: `O-${n}`, canal: cn.canal });
     return res(200, { ok: true, orden: n });
   }
   if (b.tipo !== 'venta' && b.tipo !== 'gasto') throw new Fallo(400, 'Tipo de registro desconocido.');
@@ -298,11 +319,12 @@ function registro(ctx, h, res, u) {
     Origen: 'webapp', 'Request id': txt(b.request_id) };
   if (ctx.tieneCapture) comun['Link capture'] = LINK_CAPTURE;
   if (b.tipo === 'venta') {
+    const cn = canalDe(h, b);
     const id = nuevoId(h.Ventas, 'V', ahora);
     if (ctx.tieneCapture) res.nombrarCapture(id);
     res.escrituras.push({ tipo: 'append', hoja: 'Ventas', fila: filaPara(h.Ventas, { ID: id, ...comun,
-      Producto: seguro(b.productos), Cantidad: num(b.cantidad) || '', Banco: seguro(b.banco), Cliente: seguro(b.cliente) }) });
-    registrarDetalle(h, res, itemsValidos(h, b.items), { fecha: comun.Fecha, tipo: 'venta', registro: id });
+      Producto: seguro(b.productos), Cantidad: num(b.cantidad) || '', Banco: seguro(b.banco), Cliente: seguro(txt(b.cliente) || cn.aliado), ...colsCanal(h.Ventas, cn) }) });
+    registrarDetalle(h, res, itemsValidos(h, b.items), { fecha: comun.Fecha, tipo: 'venta', registro: id, canal: cn.canal });
     return res(200, { ok: true, id });
   }
   if (!CATEGORIAS.includes(b.categoria)) throw new Fallo(400, 'Categoría no válida.');
@@ -327,7 +349,8 @@ function cobrar(ctx, h, res, u) {
   const venta = { ID: id, Fecha: fecha, Hora: c.hora, Producto: seguro(f.Productos), Monto: m.monto, Moneda: m.moneda,
     'Tasa BCV': m.tasa, 'Monto USD': m.usd, 'Monto Bs': m.bs, 'Método': b.metodo, Banco: seguro(b.banco),
     Referencia: comoTexto(b.referencia), Cliente: seguro(f.Cliente), 'Registrado por': u.nombre, Orden: num(f.Orden),
-    Origen: 'webapp', 'Request id': txt(b.request_id) };
+    Origen: 'webapp', 'Request id': txt(b.request_id),
+    ...colsCanal(h.Ventas, { canal: txt(f.Canal) || 'regular', aliado: txt(f.Aliado) }) };
   if (ctx.tieneCapture) { venta['Link capture'] = LINK_CAPTURE; res.nombrarCapture(id); }
   res.escrituras.push({ tipo: 'append', hoja: 'Ventas', fila: filaPara(h.Ventas, venta) });
   // Abono parcial: la orden sigue pendiente hasta que lo cobrado cubra el monto (con $0,50 de tolerancia).
@@ -415,11 +438,11 @@ function avisarStockBajo(h, res, delta) {
   if (!bajos.length) return;
   for (const chat_id of chatsAdmins(h)) res.avisos.push({ chat_id, texto: `Pocas galletas en Bombi (menos de su mínimo):\n${bajos.join('\n')}\nCarga más en la app: Inventario.` });
 }
-function registrarDetalle(h, res, items, { fecha, tipo, registro }) {
+function registrarDetalle(h, res, items, { fecha, tipo, registro, canal }) {
   const D = h['Detalle ventas']; if (!D || !items.length) return;
   for (const it of items) res.escrituras.push({ tipo: 'append', hoja: 'Detalle ventas', fila: filaPara(D, {
     Fecha: fecha, 'Semana (lunes)': rango('semana', fecha)[0], 'Producto id': it.id, Producto: it.nombre, Cantidad: it.cantidad,
-    Tipo: tipo, Registro: registro, 'Descuenta inventario': 'sí', Origen: 'webapp' }) });
+    Tipo: tipo, Registro: registro, 'Descuenta inventario': 'sí', Origen: 'webapp', ...(canal && D.enc.includes('Canal') ? { Canal: canal } : {}) }) });
   avisarStockBajo(h, res, Object.fromEntries(items.map((i) => [i.id, -i.cantidad])));
 }
 function anularDetalle(h, res, registro) {
@@ -474,7 +497,8 @@ function inventarioMover(ctx, h, res, u) {
   return res(200, { ok: true, cambios: Object.keys(delta).length });
 }
 
-const producto = (f) => ({ id: txt(f.id), nombre: txt(f.Nombre), categoria: txt(f['Categoría']), presentacion: txt(f['Presentación']), precio: r2(f['Precio USD']), activo: esSi(f.Activo) });
+const producto = (f) => ({ id: txt(f.id), nombre: txt(f.Nombre), categoria: txt(f['Categoría']), presentacion: txt(f['Presentación']), precio: r2(f['Precio USD']),
+  precio_aliado: txt(f['Precio aliado']) === '' ? null : r2(f['Precio aliado']), activo: esSi(f.Activo) });
 
 function guardarProductos(ctx, h, res) {
   const P = h.Productos;
@@ -483,6 +507,13 @@ function guardarProductos(ctx, h, res) {
     const precio = r2(p.precio); if (!(precio > 0)) throw new Fallo(400, `Precio inválido para ${txt(f.Nombre)}.`);
     if (precio !== r2(f['Precio USD'])) res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, 'Precio USD'), valor: precio });
     if (!!p.activo !== esSi(f.Activo)) res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, 'Activo'), valor: p.activo ? 'sí' : 'no' });
+    // Precio aliado: opcional (vacío = se usa el precio normal). Solo si existe la columna.
+    if ('precio_aliado' in p && P.enc.includes('Precio aliado')) {
+      const pa = p.precio_aliado === null || txt(p.precio_aliado) === '' ? null : r2(p.precio_aliado);
+      if (pa !== null && !(pa > 0)) throw new Fallo(400, `Precio aliado inválido para ${txt(f.Nombre)}.`);
+      const antes = txt(f['Precio aliado']) === '' ? null : r2(f['Precio aliado']);
+      if (pa !== antes) res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, 'Precio aliado'), valor: pa === null ? '' : pa });
+    }
   }
   return res(200, { ok: true });
 }
@@ -549,7 +580,7 @@ function procesar(ctx) {
       case 'por-cobrar': return porCobrar(ctx, h, res);
       case 'cobrar': return cobrar(ctx, h, res, u);
       case 'anular': return anular(ctx, h, res);
-      case 'productos': return res(200, { productos: h.Productos.filas.map(producto) });
+      case 'productos': return res(200, { productos: h.Productos.filas.map(producto), aliados: aliadosActivos(h) });
       case 'inventario': return inventario(ctx, h, res);
       case 'inventario-mover': return inventarioMover(ctx, h, res, u);
       case 'productos-guardar': return guardarProductos(ctx, h, res);

@@ -4,7 +4,7 @@ const src = (...fs) => JSON.stringify(fs.map(leer).join('\n'))
 const SHEETS = `{ googleSheetsOAuth2Api: { id: 'd9JzMLg0lUmByTRr', name: 'Google Sheets account' } }`
 const COND = (v) => `{ options: { caseSensitive: true, leftValue: '', typeValidation: 'strict' }, conditions: [ { leftValue: expr('{{ $json.paso }}'), operator: { type: 'string', operation: 'equals' }, rightValue: '${v}' } ], combinator: 'and' }`
 const SHEET_ID = `{{ $('Leer config').all().find(i => i.json.clave === 'sheet_id').json.valor }}`
-const RANGOS = ['Usuarios!A:J', 'Ventas!A:T', 'Gastos!A:R', "'Por cobrar'!A:S", 'Productos!A:F', 'Tasas!A:D'].map((r) => 'ranges=' + encodeURIComponent(r)).join('&')
+const RANGOS = ['Usuarios!A:J', 'Ventas!A:V', 'Gastos!A:R', "'Por cobrar'!A:U", 'Productos!A:H', 'Tasas!A:D', 'Inventario!A:I', "'Detalle ventas'!A:K", 'Aliados!A:D'].map((r) => 'ranges=' + encodeURIComponent(r)).join('&')
 const code = `import { workflow, node, trigger, sticky, switchCase, ifElse, expr } from '@n8n/workflow-sdk';
 
 const api = trigger({ type: 'n8n-nodes-base.webhook', version: 2.1, config: { name: 'API Bombi',

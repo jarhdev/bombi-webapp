@@ -310,3 +310,47 @@ test('inventario: cobrar una orden (completa o en abonos) no vuelve a descontar 
   assert.equal(inv.productos.find((p) => p.id === 'ny-nutella-100').stock, 6)
   assert.equal(inv.semanas[0].total, 4)
 })
+
+function conAliados(lectura) {
+  const v = hoja(lectura, 'Ventas'); v[0].push('Canal', 'Aliado')
+  const p = hoja(lectura, 'Por cobrar'); while (p[0].length < 19) p[0].push(p[0].length === 18 ? 'Request id' : `x${p[0].length}`); p[0].push('Canal', 'Aliado')
+  const prod = hoja(lectura, 'Productos'); prod[0][7] = 'Precio aliado'; prod[1][7] = 2
+  lectura.valueRanges.push({ range: 'Aliados!A1:D200', values: [['Nombre', 'Contacto', 'Notas', 'Activo'], ['Café Lumen', '', '', 'sí'], ['Viejo Aliado', '', '', 'no']] })
+  return lectura
+}
+
+test('aliados: precio aliado, venta y orden marcadas, cobro hereda el aliado', () => {
+  const t = login()
+  const l = conAliados(conInventario(conPin(fixture(), 'Jose', '1234')))
+  const pr = llamar('productos', {}, { token: t, lectura: l }).respuesta
+  assert.deepEqual(pr.aliados, ['Café Lumen'])
+  assert.equal(pr.productos[0].precio_aliado, 2); assert.equal(pr.productos[1].precio_aliado, null)
+  // Aliado inexistente o inactivo: error.
+  const base = { tipo: 'venta', monto: 4, moneda: 'USD', metodo: 'Zelle', canal: 'aliado' }
+  assert.equal(llamar('registro', { ...base, aliado: 'Viejo Aliado', referencia: 'A0', request_id: 'a0' }, { token: t, lectura: l }).status, 400)
+  // Venta de aliado: Cliente = aliado si no se escribe otro, Canal/Aliado al final.
+  const v = llamar('registro', { ...base, aliado: 'cafe lumen', referencia: 'A1', request_id: 'a1', items: [{ id: 'ny-nutella-100', cantidad: 2 }] }, { token: t, lectura: l })
+  assert.equal(v.status, 200, JSON.stringify(v.respuesta))
+  const fv = v.escrituras.find((x) => x.hoja === 'Ventas').fila
+  const enc = hoja(l, 'Ventas')[0]
+  assert.equal(fv[enc.indexOf('Cliente')], 'Café Lumen'); assert.equal(fv[enc.indexOf('Canal')], 'aliado'); assert.equal(fv[enc.indexOf('Aliado')], 'Café Lumen')
+  assert.equal(v.escrituras.find((x) => x.hoja === 'Detalle ventas').fila.length, 10) // sin columna Canal en Detalle: no la escribe
+  // Venta normal: Canal regular, Aliado vacío.
+  const vr = llamar('registro', { ...base, canal: undefined, referencia: 'A2', request_id: 'a2' }, { token: t, lectura: l })
+  const fr = vr.escrituras.find((x) => x.hoja === 'Ventas').fila
+  assert.equal(fr[enc.indexOf('Canal')], 'regular'); assert.equal(fr[enc.indexOf('Aliado')], '')
+  // Orden de aliado y su cobro.
+  const o = llamar('registro', { tipo: 'cobrar', canal: 'aliado', aliado: 'Café Lumen', productos: '2x NY Nutella 100g', monto: 4, request_id: 'oa' }, { token: t, lectura: l })
+  assert.equal(o.status, 200, JSON.stringify(o.respuesta))
+  const fo = o.escrituras.find((x) => x.hoja === 'Por cobrar').fila; const pe = hoja(l, 'Por cobrar')[0]
+  assert.equal(fo[pe.indexOf('Cliente')], 'Café Lumen'); assert.equal(fo[pe.indexOf('Aliado')], 'Café Lumen')
+  aplicar(l, o)
+  const c = llamar('cobrar', { orden: o.respuesta.orden, monto: 4, moneda: 'USD', tasa: 873.87, metodo: 'Zelle', referencia: 'A3', request_id: 'a3' }, { token: t, lectura: l })
+  const fc = c.escrituras.find((x) => x.hoja === 'Ventas').fila
+  assert.equal(fc[enc.indexOf('Canal')], 'aliado'); assert.equal(fc[enc.indexOf('Aliado')], 'Café Lumen')
+  // Guardar precio aliado (y borrarlo).
+  const g = llamar('productos-guardar', { productos: [{ ...pr.productos[0], precio_aliado: '' }, { ...pr.productos[1], precio_aliado: 2.8 }] }, { token: t, lectura: l })
+  assert.deepEqual(g.escrituras.map((x) => [x.rango, x.valor]), [["'Productos'!H2", ''], ["'Productos'!H3", 2.8]])
+  // Sin la pestaña Aliados: la venta normal sigue funcionando.
+  assert.equal(llamar('registro', { ...base, canal: 'regular', referencia: 'A4', request_id: 'a4' }, { token: t }).status, 200)
+})

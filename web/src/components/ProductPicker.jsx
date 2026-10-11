@@ -4,7 +4,7 @@ import { Stepper } from './ui.jsx'
 
 // Selector de productos. Las NY Cookies tienen dos selectores por fila (100g y 160g):
 // una sola toca por galleta, sin tener que cambiar primero la presentación.
-export default function ProductPicker({ productos, cantidades, onChange, total }) {
+export default function ProductPicker({ productos, cantidades, onChange, total, etiquetaTotal = 'Total según catálogo' }) {
   const { ny, otros } = agruparCatalogo(productos)
   const set = (id, n) => onChange({ ...cantidades, [id]: n })
 
@@ -40,7 +40,7 @@ export default function ProductPicker({ productos, cantidades, onChange, total }
       </div>
       {total > 0 && (
         <div className="prod-total">
-          <span>Total según catálogo</span>
+          <span>{etiquetaTotal}</span>
           <strong>{formatUsd(total)}</strong>
         </div>
       )}

@@ -51,3 +51,16 @@ Pestañas nuevas en el Sheet:
 Rutas de la API: `inventario` (stock + vendidos por semana) e `inventario-mover` (`tipo: entrada` para todos, `tipo: conteo` solo admin).
 Cuando una venta, orden o conteo hace que un producto baje de su mínimo, se avisa una vez por Telegram a los admins.
 El Sheet usa configuración regional es_VE: las fórmulas escritas por API van con punto y coma.
+
+## Aliados (2026-10-11)
+
+Los aliados compran a un precio menor, igual para todos.
+
+- `Productos` → `Precio aliado` (columna H). Si está vacío se usa el precio normal. Se edita en la app (Ajustes → Productos) o en el Sheet.
+- `Aliados`: Nombre | Contacto | Notas | Activo. La app solo ofrece los activos (Activo vacío cuenta como activo).
+- `Ventas` → `Canal` (U) y `Aliado` (V); `Por cobrar` → `Canal` (T) y `Aliado` (U); `Detalle ventas` → `Canal` (K). Canal es `regular` o `aliado`. Las filas del bot quedan vacías en esas columnas.
+- Al cobrar una orden de aliado, la venta hereda el Canal y el Aliado de la orden.
+- `Resumen aliados`: fórmulas (con `;`) que suman por aliado las ventas USD (sin anuladas), el número de ventas directas, las órdenes pendientes y lo que falta por cobrar en USD.
+
+La ruta `productos` devuelve `{ productos (con precio_aliado), aliados }`. `registro` acepta `canal: 'aliado'` y `aliado: <nombre>`.
+`Leer hojas` lee Ventas A:V, Por cobrar A:U, Productos A:H, Detalle ventas A:K y Aliados A:D.

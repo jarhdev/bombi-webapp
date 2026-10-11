@@ -6,8 +6,8 @@ const NY = ['NY Red Velvet', 'NY Milka', 'NY Nutella', 'NY Lemon', 'NY Cri Cri',
 export function seedProductos() {
   const list = []
   for (const sabor of NY) {
-    list.push({ id: `${slug(sabor)}-100`, nombre: sabor, categoria: 'NY Cookies', presentacion: '100g', precio: 2.5, activo: true })
-    list.push({ id: `${slug(sabor)}-160`, nombre: sabor, categoria: 'NY Cookies', presentacion: '160g', precio: 3.5, activo: true })
+    list.push({ id: `${slug(sabor)}-100`, nombre: sabor, categoria: 'NY Cookies', presentacion: '100g', precio: 2.5, precio_aliado: 2, activo: true })
+    list.push({ id: `${slug(sabor)}-160`, nombre: sabor, categoria: 'NY Cookies', presentacion: '160g', precio: 3.5, precio_aliado: 3, activo: true })
   }
   list.push(
     { id: 'thin-40', nombre: 'Thin Cookies', categoria: 'Otros', presentacion: '40g', precio: 2, activo: true },

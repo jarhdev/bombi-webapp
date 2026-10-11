@@ -27,6 +27,15 @@ function save(d = memo) {
   try { localStorage.setItem(KEY, JSON.stringify(d)) } catch { /* ignorar */ }
 }
 
+// Aliados de prueba (en el Sheet real salen de la pestaña Aliados).
+const aliados = () => db().aliados ?? ['Café Lumen', 'Panadería Sol']
+function canalDe(req) {
+  if (req.canal !== 'aliado') return { canal: 'regular', aliado: '' }
+  const a = aliados().find((x) => x.toLowerCase() === String(req.aliado || '').toLowerCase())
+  if (!a) throw new ApiError('Elige un aliado de la lista.', 400)
+  return { canal: 'aliado', aliado: a }
+}
+
 const wait = (ms = 350) => new Promise((r) => setTimeout(r, ms))
 const nextId = (p) => `${p}${++db().seq}`
 
@@ -146,7 +155,7 @@ export const mockApi = {
     const movimientos = [
       ...db().ventas.map((v) => ({
         id: v.id, tipo: 'venta', fecha: v.fecha, creado: v.creado, anulado: v.anulado,
-        titulo: v.orden ? `Venta · Orden #${v.orden}` : `Venta · ${v.metodo}`,
+        titulo: v.orden ? `Venta · Orden #${v.orden}` : `Venta${v.aliado ? " aliado" : ""} · ${v.metodo}`,
         detalle: [v.cliente || v.productos, `${v.registrado_por}${v.origen === 'bot' ? ' (bot)' : ''}`].filter(Boolean).join(' · '),
         monto_usd: v.monto_usd,
       })),
@@ -205,10 +214,11 @@ export const mockApi = {
         throw new ApiError('Esa referencia ya está registrada.', 409, { duplicado: dup })
       }
     }
+    const cn = req.tipo === 'gasto' ? null : canalDe(req)
     const id = (req.tipo === 'gasto' ? 'G-' : 'V-') + new Date().toISOString().replace(/\D/g, '').slice(2, 8) + '-' + String(++d.seq).padStart(6, '0')
     const base = { id, fecha: req.fecha, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, referencia: req.referencia || '', registrado_por: u.nombre, anulado: false, creado: new Date().toISOString() }
     if (req.tipo === 'venta') {
-      const v = { ...base, cliente: req.cliente, productos: req.productos, cantidad: req.cantidad, banco: req.banco, origen: 'webapp', orden: '', capture: req.capture ? '(capture de prueba)' : '' }
+      const v = { ...base, cliente: req.cliente || cn.aliado, aliado: cn.aliado, productos: req.productos, cantidad: req.cantidad, banco: req.banco, origen: 'webapp', orden: '', capture: req.capture ? '(capture de prueba)' : '' }
       d.ventas.push(v)
       registrarDetalle(req.items, req.fecha, v.id)
       save()
@@ -223,7 +233,7 @@ export const mockApi = {
     if (req.tipo === 'cobrar') {
       const orden = Math.max(0, ...d.porCobrar.map((o) => o.orden)) + 1
       registrarDetalle(req.items, req.fecha_entrega, `O-${orden}`)
-      d.porCobrar.push({ orden, fecha_entrega: req.fecha_entrega, cliente: req.cliente, productos: req.productos, monto: req.monto, moneda: 'USD', fecha_esperada_pago: req.fecha_esperada_pago, estado: 'pendiente', fecha_pago: '', referencia: '', registrado_por: u.nombre, creado: new Date().toISOString() })
+      d.porCobrar.push({ orden, fecha_entrega: req.fecha_entrega, cliente: req.cliente || cn.aliado, aliado: cn.aliado, productos: req.productos, monto: req.monto, moneda: 'USD', fecha_esperada_pago: req.fecha_esperada_pago, estado: 'pendiente', fecha_pago: '', referencia: '', registrado_por: u.nombre, creado: new Date().toISOString() })
       save()
       return { ok: true, orden }
     }
@@ -263,7 +273,7 @@ export const mockApi = {
     o.monto_pagado = req.monto
     o.moneda_pago = req.moneda
     o.metodo_pago = req.metodo
-    d.ventas.push({ id: nextId('V-'), fecha: req.fecha, cliente: o.cliente, productos: o.productos, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, banco: req.banco || '', referencia: req.referencia || '', origen: 'webapp', registrado_por: u.nombre, orden: o.orden, anulado: false, creado: new Date().toISOString(), capture: req.capture ? '(capture de prueba)' : '' })
+    d.ventas.push({ id: nextId('V-'), fecha: req.fecha, cliente: o.cliente, aliado: o.aliado || '', productos: o.productos, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, banco: req.banco || '', referencia: req.referencia || '', origen: 'webapp', registrado_por: u.nombre, orden: o.orden, anulado: false, creado: new Date().toISOString(), capture: req.capture ? '(capture de prueba)' : '' })
     save()
     return { ok: true, cerrada, pagado_usd: pagado, saldo_usd: cerrada ? 0 : round2(antes.monto_usd - pagado) }
   },
@@ -333,7 +343,7 @@ export const mockApi = {
 
   async productos() {
     await wait(200)
-    return { productos: db().productos }
+    return { productos: db().productos, aliados: aliados() }
   },
 
   async guardarProductos({ productos }) {

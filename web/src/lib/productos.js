@@ -31,6 +31,12 @@ export function textoProductos(cantidades, productos) {
     .join(', ')
 }
 
+// Catálogo con el precio que corresponde: a los aliados se les cobra "Precio aliado" (si está vacío, el normal).
+export function conPrecioDe(productos, canal) {
+  if (canal !== 'aliado') return productos
+  return productos.map((p) => ({ ...p, precio: p.precio_aliado > 0 ? p.precio_aliado : p.precio }))
+}
+
 export function totalProductos(cantidades, productos) {
   const total = productos.reduce((s, p) => s + (cantidades[p.id] || 0) * p.precio, 0)
   return Math.round(total * 100) / 100

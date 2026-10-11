@@ -7,7 +7,7 @@ import Resumen from './screens/Resumen.jsx'
 import Registro from './screens/Registro.jsx'
 import PorCobrar from './screens/PorCobrar.jsx'
 import Inventario from './screens/Inventario.jsx'
-import Ajustes, { Productos, Tasa, Usuarios } from './screens/Ajustes.jsx'
+import Ajustes, { Precios, Productos, Tasa, Usuarios } from './screens/Ajustes.jsx'
 import { Login, Mensaje } from './screens/Login.jsx'
 
 export default function App() {
@@ -15,6 +15,7 @@ export default function App() {
   const [estadoAuth, setEstadoAuth] = useState(sesion ? 'ok' : enTelegram ? 'cargando' : 'login')
   const [pila, setPila] = useState([{ name: 'resumen' }])
   const [productos, setProductos] = useState([])
+  const [aliados, setAliados] = useState([])
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
 
@@ -40,7 +41,7 @@ export default function App() {
 
   useEffect(() => {
     if (estadoAuth !== 'ok') return
-    api.productos().then((d) => setProductos(d.productos)).catch((e) => notify(e.message, true))
+    api.productos().then((d) => { setProductos(d.productos); setAliados(d.aliados || []) }).catch((e) => notify(e.message, true))
   }, [estadoAuth, notify])
 
   const logout = useCallback(() => {
@@ -73,12 +74,13 @@ export default function App() {
     const comun = { usuario: u, go, back, notify }
     const p = actual.params || {}
     switch (actual.name) {
-      case 'registro': contenido = <Registro key={pila.length} {...comun} tipoInicial={p.tipo} productos={productos} />; break
+      case 'registro': contenido = <Registro key={pila.length} {...comun} tipoInicial={p.tipo} productos={productos} aliados={aliados} />; break
       case 'cobrar': contenido = <PorCobrar {...comun} />; break
       case 'inventario': contenido = <Inventario {...comun} />; break
       case 'ajustes': contenido = <Ajustes {...comun} logout={logout} />; break
       case 'usuarios': contenido = u.rol === 'admin' ? <Usuarios {...comun} /> : null; break
       case 'productos': contenido = u.rol === 'admin' ? <Productos {...comun} productos={productos} onSaved={setProductos} /> : null; break
+      case 'precios': contenido = <Precios {...comun} productos={productos} />; break
       case 'tasa': contenido = u.rol === 'admin' ? <Tasa {...comun} /> : null; break
       default: contenido = <Resumen key={pila.length} {...comun} />
     }

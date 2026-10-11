@@ -49,7 +49,7 @@ export default function PorCobrar({ back, go, notify }) {
               <div className="head">
                 <div className="l">
                   <span className="num">Orden #{o.orden}</span>
-                  <span className="who">{o.cliente}</span>
+                  <span className="who">{o.cliente}{o.aliado && <span className="tag-aliado">Aliado{o.aliado !== o.cliente ? ` · ${o.aliado}` : ''}</span>}</span>
                   <span className="meta">Entregada {nombreDia(o.fecha_entrega)} {fechaCorta(o.fecha_entrega)}{o.productos ? ` · ${o.productos}` : ''}</span>
                   <span className={`meta${vencida ? ' vencida' : ''}`}>
                     {vencida ? 'Vencida · ' : 'Cobro '}{nombreDia(o.fecha_esperada_pago)} {fechaCorta(o.fecha_esperada_pago)}

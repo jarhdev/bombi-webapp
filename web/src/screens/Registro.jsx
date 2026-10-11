@@ -6,7 +6,7 @@ import ProductPicker from '../components/ProductPicker.jsx'
 import { api } from '../api/index.js'
 import { formatBs, formatMonto, formatUsd, montoInput, parseMonto, round2, toUsd } from '../lib/format.js'
 import { avisoFechaPago, fechaCorta, hoyISO, viernesSiguiente } from '../lib/dates.js'
-import { textoProductos, totalProductos } from '../lib/productos.js'
+import { conPrecioDe, textoProductos, totalProductos } from '../lib/productos.js'
 import { CATEGORIAS_GASTO, METODOS, METODOS_CON_BANCO, MONEDA_POR_METODO, MONEDAS, OPCIONES_MONEDA } from '../lib/constantes.js'
 import { uid } from '../lib/uid.js'
 import { vibrar } from '../telegram/tg.js'
@@ -17,6 +17,10 @@ const TIPOS = [
   { value: 'cobrar', label: 'Por cobrar' },
 ]
 const BOTON = { venta: 'Guardar venta', gasto: 'Guardar gasto', cobrar: 'Guardar orden' }
+const CANALES = [
+  { value: 'regular', label: 'Cliente' },
+  { value: 'aliado', label: 'Aliado' },
+]
 
 const vacio = () => ({
   capture: null,
@@ -33,10 +37,12 @@ const vacio = () => ({
   banco: '',
   referencia: '',
   cantidades: {},
+  canal: 'regular',
+  aliado: '',
   ia: {},
 })
 
-export default function Registro({ tipoInicial = 'venta', back, notify, productos }) {
+export default function Registro({ tipoInicial = 'venta', back, notify, productos, aliados = [] }) {
   const [tipo, setTipo] = useState(tipoInicial)
   const [f, setF] = useState(vacio)
   const [tasaDia, setTasaDia] = useState(null)
@@ -64,7 +70,9 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
   const esCobrar = tipo === 'cobrar'
   const moneda = esCobrar ? 'USD' : f.moneda
   const tasa = editTasa ? parseMonto(tasaManual) : tasaDia?.tasa || 0
-  const totalUsd = useMemo(() => totalProductos(f.cantidades, productos), [f.cantidades, productos])
+  const esAliado = tipo !== 'gasto' && f.canal === 'aliado'
+  const catalogo = useMemo(() => conPrecioDe(productos, esAliado ? 'aliado' : 'regular'), [productos, esAliado])
+  const totalUsd = useMemo(() => totalProductos(f.cantidades, catalogo), [f.cantidades, catalogo])
   const cantidadTotal = Object.values(f.cantidades).reduce((s, n) => s + n, 0)
 
   // El monto se calcula solo con el catálogo hasta que la persona lo edita (o lo llena la IA).
@@ -97,7 +105,8 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
   function validar() {
     if (!(montoNum > 0)) return 'Escribe el monto.'
     if (moneda === 'Bs' && !(tasa > 0)) return 'Falta la tasa del día para convertir a dólares.'
-    if (esCobrar && !f.cliente.trim()) return 'Escribe la empresa.'
+    if (esAliado && !f.aliado) return 'Elige el aliado.'
+    if (esCobrar && !esAliado && !f.cliente.trim()) return 'Escribe la empresa.'
     if (esCobrar && !textoProductos(f.cantidades, productos)) return 'Agrega al menos un producto a la orden.'
     if (tipo === 'gasto' && !f.categoria) return 'Elige una categoría.'
     if (f.capture?.estado === 'leyendo') return 'Espera a que termine de leer el capture.'
@@ -112,10 +121,11 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
     const productosTxt = textoProductos(f.cantidades, productos)
     // Productos exactos del selector: el inventario y "vendidos por semana" se calculan con esto.
     const items = Object.entries(f.cantidades).filter(([, n]) => n > 0).map(([id, cantidad]) => ({ id, cantidad }))
+    const canal = esAliado ? { canal: 'aliado', aliado: f.aliado } : { canal: 'regular' }
     const req = esCobrar
       ? {
           tipo, request_id: requestId.current, cliente: f.cliente.trim(), productos: productosTxt,
-          monto: montoNum, moneda: 'USD', fecha_entrega: f.fecha, fecha_esperada_pago: f.fechaCobro, items,
+          monto: montoNum, moneda: 'USD', fecha_entrega: f.fecha, fecha_esperada_pago: f.fechaCobro, items, ...canal,
         }
       : {
           tipo, request_id: requestId.current, fecha: f.fecha, monto: montoNum, moneda, tasa: moneda === 'Bs' ? tasa : tasaDia?.tasa || 0,
@@ -123,7 +133,7 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
           metodo: f.metodo, referencia: f.referencia.trim(),
           capture: f.capture?.blob || null, confirmar_duplicado: confirmarDuplicado,
           ...(tipo === 'venta'
-            ? { cliente: f.cliente.trim(), productos: productosTxt, cantidad: cantidadTotal, banco: f.banco.trim(), items }
+            ? { cliente: f.cliente.trim(), productos: productosTxt, cantidad: cantidadTotal, banco: f.banco.trim(), items, ...canal }
             : { categoria: f.categoria, concepto: f.concepto.trim(), proveedor: f.proveedor.trim() }),
         }
     try {
@@ -236,9 +246,25 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
         )}
 
         {tipo !== 'gasto' && (
+          <div className="field">
+            <span>Precio</span>
+            <Segmented options={CANALES} value={f.canal} onChange={(c) => set({ canal: c, ...(f.ia.monto ? {} : { montoManual: false, monto: '' }) })} label="Precio de cliente o de aliado" />
+          </div>
+        )}
+
+        {esAliado && (
+          <div className="field">
+            <span>Aliado</span>
+            {aliados.length > 0
+              ? <Chips options={aliados} value={f.aliado} onChange={(a) => set({ aliado: a })} label="Aliado" />
+              : <span className="hint">Todavía no hay aliados. Agrégalos en la pestaña Aliados del Google Sheets.</span>}
+          </div>
+        )}
+
+        {tipo !== 'gasto' && (
           <label className="field">
-            {esCobrar ? 'Empresa' : 'Cliente'}
-            <input className="input" placeholder="Nombre" value={f.cliente} onChange={(e) => set({ cliente: e.target.value })} autoComplete="off" />
+            {esCobrar ? 'Empresa' : 'Cliente'}{esAliado ? ' (opcional)' : ''}
+            <input className="input" placeholder={esAliado ? f.aliado || 'Nombre' : 'Nombre'} value={f.cliente} onChange={(e) => set({ cliente: e.target.value })} autoComplete="off" />
           </label>
         )}
 
@@ -260,7 +286,8 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
         )}
 
         {tipo !== 'gasto' && (
-          <ProductPicker productos={productos} cantidades={f.cantidades} onChange={(c) => set({ cantidades: c })} total={totalUsd} />
+          <ProductPicker productos={catalogo} cantidades={f.cantidades} onChange={(c) => set({ cantidades: c })} total={totalUsd}
+            etiquetaTotal={esAliado ? 'Total precio aliado' : 'Total según catálogo'} />
         )}
 
         {!esCobrar && (
