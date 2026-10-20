@@ -73,3 +73,11 @@ Cuando un cliente paga el total en varias transferencias, la app permite adjunta
 - Se guarda **una sola fila** en Ventas (o un solo cobro). La app manda los archivos como `capture`, `capture_2`, `capture_3`…
 - "Preparar subida" sube cada capture a Drive (`V-…`, `V-…-2`, `V-…-3`) y "Completar link" escribe todos los links en la misma celda "Link capture", uno por línea.
 - Al revisar referencias repetidas, cada referencia del grupo se compara por separado: si "222" ya estaba dentro de "111 / 222", la app avisa.
+
+## Abonos juntos en Por cobrar (2026-10-20)
+
+En Por cobrar, las columnas de pago (`Metodo de pago`, `Referencia`, `Moneda pago`, `Monto pagado`, `Tasa pago`, `Link capture`) guardan **todos** los pagos de la orden, no solo el último. Se calculan desde las ventas de esa orden (columna `Orden` en Ventas):
+
+- Referencias, métodos, tasas y links quedan juntos en la misma celda (" / " o uno por línea en los links).
+- `Monto pagado` es la suma si todos los pagos son de la misma moneda; si se mezclan monedas queda como texto ("6593,42 Bs + 1 USD").
+- Al anular un abono, esas columnas se recalculan con los pagos que quedan.

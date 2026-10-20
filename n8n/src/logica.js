@@ -338,6 +338,30 @@ function registro(ctx, h, res, u) {
   return res(200, { ok: true, id });
 }
 
+// Datos de pago de una orden en Por cobrar: todos sus pagos juntos (abonos), calculados desde
+// las ventas de la orden, así se corrigen solos si se anula un abono.
+const unicos = (xs) => [...new Set(xs.map(txt).filter(Boolean))];
+const coma = (n) => String(r2(n)).replace('.', ',');
+function pagosDeOrden(h, n, excluirId) {
+  return h.Ventas.filas.filter((f) => num(f.Orden) === n && !esSi(f.Anulado) && txt(f.ID) !== excluirId).map((f) => ({
+    metodo: txt(f['Método']), referencia: txt(f.Referencia), moneda: txt(f.Moneda) || 'Bs', monto: num(f.Monto),
+    tasa: num(f['Tasa BCV']), link: txt(f['Link capture']) }));
+}
+function columnasPago(pagos) {
+  const monedas = unicos(pagos.map((p) => p.moneda));
+  const tasas = unicos(pagos.map((p) => (p.tasa > 0 ? String(p.tasa) : '')));
+  return {
+    'Metodo de pago': unicos(pagos.map((p) => p.metodo)).join(' / '),
+    Referencia: comoTexto(unicos(pagos.flatMap((p) => partesRef(p.referencia))).join(' / ')),
+    'Moneda pago': monedas.join(' / '),
+    // Una sola moneda: el total sumado. Monedas mezcladas: cada pago con su moneda.
+    'Monto pagado': !pagos.length ? '' : monedas.length <= 1 ? r2(pagos.reduce((s, p) => s + p.monto, 0))
+      : pagos.map((p) => `${coma(p.monto)} ${p.moneda}`).join(' + '),
+    'Tasa pago': tasas.length <= 1 ? (tasas[0] ? num(tasas[0]) : '') : tasas.map((t) => coma(num(t))).join(' / '),
+  };
+}
+const linksDe = (pagos) => unicos(pagos.flatMap((p) => p.link.split('\n'))).filter((l) => l !== LINK_CAPTURE).join('\n');
+
 function cobrar(ctx, h, res, u) {
   const b = ctx.body; const c = caracas(ctx.ahora); const P = h['Por cobrar'];
   if (yaProcesado(h, b.request_id)) return res(200, { ok: true, repetido: true });
@@ -362,12 +386,14 @@ function cobrar(ctx, h, res, u) {
   const pagado = r2(o.pagado_usd + m.usd);
   const cerrada = !(o.monto_usd > 0) || pagado >= o.monto_usd - TOLERANCIA_USD;
   const saldo = o.monto_usd > 0 ? r2(Math.max(0, o.monto_usd - pagado)) : 0;
-  // Datos del último pago + total cobrado acumulado en "Monto pagado USD".
-  const cambios = { 'Metodo de pago': b.metodo, Referencia: comoTexto(b.referencia),
-    'Moneda pago': m.moneda, 'Monto pagado': m.monto, 'Tasa pago': m.tasa, 'Monto pagado USD': pagado };
+  // Todos los pagos de la orden (abonos anteriores + este) + total cobrado acumulado en "Monto pagado USD".
+  const previos = pagosDeOrden(h, num(f.Orden));
+  const cambios = { ...columnasPago([...previos, { metodo: b.metodo, referencia: txt(b.referencia), moneda: m.moneda, monto: m.monto, tasa: m.tasa }]),
+    'Monto pagado USD': pagado };
   if (cerrada) { cambios.Estado = 'pagado'; cambios['Fecha pago'] = fecha; }
-  if (ctx.tieneCapture) cambios['Link capture'] = LINK_CAPTURE;
   for (const [col, valor] of Object.entries(cambios)) res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, col), valor });
+  // El link nuevo se agrega a los de los abonos anteriores ("Completar link" los junta).
+  if (ctx.tieneCapture) res.escrituras.push({ tipo: 'update', rango: celda(P, f._fila, 'Link capture'), valor: LINK_CAPTURE, previo: linksDe(previos) });
   return res(200, { ok: true, id, cerrada, pagado_usd: pagado, saldo_usd: cerrada ? 0 : saldo });
 }
 
@@ -395,6 +421,10 @@ function anular(ctx, h, res) {
     const o = orden(fo, tasa, abonosPorOrden(h));
     const pagado = r2(Math.max(0, o.pagado_usd - r2(f['Monto USD'])));
     res.escrituras.push({ tipo: 'update', rango: celda(P, fo._fila, 'Monto pagado USD'), valor: pagado });
+    // Los datos de pago quedan solo con los abonos que siguen vigentes.
+    const quedan = pagosDeOrden(h, n, txt(f.ID));
+    for (const [col, valor] of Object.entries({ ...columnasPago(quedan), 'Link capture': linksDe(quedan) }))
+      if (P.enc.includes(col)) res.escrituras.push({ tipo: 'update', rango: celda(P, fo._fila, col), valor });
     if (o.estado === 'pagado' && o.monto_usd > 0 && pagado < o.monto_usd - TOLERANCIA_USD) {
       res.escrituras.push({ tipo: 'update', rango: celda(P, fo._fila, 'Estado'), valor: 'pendiente' });
       res.escrituras.push({ tipo: 'update', rango: celda(P, fo._fila, 'Fecha pago'), valor: '' });

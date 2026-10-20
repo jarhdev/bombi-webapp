@@ -27,4 +27,8 @@ assert.equal(varios[0].json.body.data[0].values[0][0], 'https://drive.google.com
 nodos['Lógica Bombi'] = { first: () => ({ json: { capture_nombre: 'V-1' }, binary: { capture: 'b1', capture_2: 'b2' } }) }
 const sub = correr(leer('preparar-subida.js'), nodos)
 assert.deepEqual(sub.map((i) => [i.json.capture_nombre, i.binary.capture]), [['V-1', 'b1'], ['V-1-2', 'b2']])
+// Por cobrar con abonos: el link nuevo se agrega a los anteriores.
+nodos['Lógica Bombi'] = items([{ escrituras: [{ tipo: 'update', rango: "'Por cobrar'!R17", valor: '{{LINK_CAPTURE}}', previo: 'https://drive/1' }] }])
+const prev = correr(leer('completar-link.js'), nodos, { json: { id: 'B2' } })
+assert.equal(prev[0].json.body.data.at(-1).values[0][0], 'https://drive/1\nhttps://drive.google.com/file/d/B2/view')
 console.log('prueba-link OK')

@@ -19,7 +19,8 @@ pedidos.forEach((p, i) => {
   });
 });
 for (const e of $('Lógica Bombi').first().json.escrituras) {
-  if (e.tipo === 'update' && e.valor === MARCA) data.push({ range: e.rango, values: [[link]] });
+  // En Por cobrar el link se agrega a los de abonos anteriores (e.previo).
+  if (e.tipo === 'update' && e.valor === MARCA) data.push({ range: e.rango, values: [[[e.previo, link].filter(Boolean).join('\n')]] });
 }
 if (!data.length) return [];
 let sheetId = '';

@@ -371,3 +371,29 @@ test('varios captures: referencias juntas, cada una se revisa contra las ya regi
   assert.equal(r2.status, 409)
   assert.equal(llamar('registro', { ...base, referencia: '1112', request_id: 'mc4' }, { token: t, lectura: l }).status, 200)
 })
+
+test('abonos: Por cobrar guarda todos los pagos juntos y se corrige al anular uno', () => {
+  const t = login()
+  const lectura = conPin(fixture(), 'Jose', '1234')
+  const pc = hoja(lectura, 'Por cobrar'); const ventas = hoja(lectura, 'Ventas')
+  pc.push([3, 46301, 'Juan Méndez', '3 galletas', 8.5, 'USD', 46304, 'pendiente'])
+  const col = (nombre) => String.fromCharCode(65 + pc[0].indexOf(nombre))
+  const valor = (r, nombre) => r.escrituras.find((e) => e.tipo === "update" && e.rango.endsWith(`!${col(nombre)}${pc.length}`))
+  // Ya hay un abono de Bs 6593,42 con su capture.
+  const fv = Array(20).fill(''); Object.assign(fv, { 0: 'V-A1', 1: 46310, 5: 6593.42, 6: 'Bs', 7: 879.12, 8: 7.5, 10: 'Pago Móvil', 12: "'42625233", 15: 3, 16: 'webapp', 17: 'https://drive/1' })
+  ventas.push(fv)
+  const c = llamar('cobrar', { orden: 3, monto: 879.12, moneda: 'Bs', tasa: 879.12, metodo: 'Pago Móvil', referencia: '42692705', request_id: 'ab2' }, { token: t, lectura, tieneCapture: true })
+  assert.equal(c.status, 200, JSON.stringify(c.respuesta)); assert.equal(c.respuesta.cerrada, true)
+  assert.equal(valor(c, 'Referencia').valor, "'42625233 / 42692705")
+  assert.equal(valor(c, 'Monto pagado').valor, 7472.54)
+  assert.equal(valor(c, 'Metodo de pago').valor, 'Pago Móvil')
+  assert.equal(valor(c, 'Tasa pago').valor, 879.12)
+  const link = c.escrituras.find((e) => e.tipo === "update" && e.valor === "{{LINK_CAPTURE}}" && e.rango.startsWith("'Por cobrar'"))
+  assert.equal(link.previo, 'https://drive/1')
+  // Monedas mezcladas: cada pago con su moneda.
+  const z = llamar('cobrar', { orden: 3, monto: 1, moneda: 'USD', tasa: 879.12, metodo: 'Zelle', referencia: 'Z9', request_id: 'ab3' }, { token: t, lectura })
+  assert.equal(valor(z, 'Monto pagado').valor, '6593,42 Bs + 1 USD'); assert.equal(valor(z, 'Metodo de pago').valor, 'Pago Móvil / Zelle')
+  // Anular el abono que había: quedan vacíos los datos de pago.
+  const an = llamar('anular', { tipo: 'venta', id: 'V-A1' }, { token: t, lectura })
+  assert.equal(valor(an, 'Referencia').valor, ''); assert.equal(valor(an, 'Link capture').valor, '')
+})
