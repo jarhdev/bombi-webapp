@@ -71,3 +71,14 @@ test('precio aliado: usa precio_aliado y, si falta, el normal', () => {
   assert.equal(totalProductos({ a: 2, b: 1 }, conPrecioDe(prods, 'aliado')), 8.5)
   assert.equal(conPrecioDe(prods, 'regular'), prods)
 })
+
+test('varios captures: suma, referencias unidas y monedas distintas', async () => {
+  const { combinarLecturas } = await import('./captures.js')
+  const c = (key, datos, estado = 'leido') => ({ key, blob: {}, estado, datos })
+  const dos = combinarLecturas([c(1, { monto: 2190, moneda: 'Bs', referencia: '111', fecha: '2026-10-19', metodo: 'Pago Móvil' }), c(2, { monto: 2188.5, moneda: 'Bs', referencia: '222' })])
+  assert.equal(dos.monto, 4378.5); assert.equal(dos.referencia, '111 / 222'); assert.equal(dos.fecha, '2026-10-19'); assert.equal(dos.cantidad, 2)
+  const mezcla = combinarLecturas([c(1, { monto: 10, moneda: 'USD' }), c(2, { monto: 2000, moneda: 'Bs' })])
+  assert.equal(mezcla.monedasDistintas, true); assert.equal(mezcla.monto, null)
+  const sinLeer = combinarLecturas([c(1, { monto: 10, moneda: 'Bs', referencia: '9' }), c(2, null, 'manual')])
+  assert.equal(sinLeer.monto, null); assert.equal(sinLeer.sinLeer, 1); assert.equal(sinLeer.referencia, '9')
+})

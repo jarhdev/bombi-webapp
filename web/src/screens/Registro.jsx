@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { Chips, Segmented, Sheet, TopBar } from '../components/ui.jsx'
-import CaptureField from '../components/CaptureField.jsx'
+import CaptureField, { AvisoCaptures } from '../components/CaptureField.jsx'
 import ProductPicker from '../components/ProductPicker.jsx'
 import { api } from '../api/index.js'
 import { formatBs, formatMonto, formatUsd, montoInput, parseMonto, round2, toUsd } from '../lib/format.js'
 import { avisoFechaPago, fechaCorta, hoyISO, viernesSiguiente } from '../lib/dates.js'
 import { conPrecioDe, textoProductos, totalProductos } from '../lib/productos.js'
+import { combinarLecturas, firmaCaptures } from '../lib/captures.js'
 import { CATEGORIAS_GASTO, METODOS, METODOS_CON_BANCO, MONEDA_POR_METODO, MONEDAS, OPCIONES_MONEDA } from '../lib/constantes.js'
 import { uid } from '../lib/uid.js'
 import { vibrar } from '../telegram/tg.js'
@@ -23,7 +24,7 @@ const CANALES = [
 ]
 
 const vacio = () => ({
-  capture: null,
+  captures: [],
   monto: '',
   montoManual: false,
   moneda: 'Bs',
@@ -86,6 +87,17 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
     setError(null)
   }
 
+  // Lo leído por IA de todos los captures, combinado (monto sumado, referencias unidas).
+  const lectura = combinarLecturas(f.captures)
+  const firma = firmaCaptures(f.captures)
+  useEffect(() => {
+    const c = combinarLecturas(f.captures)
+    if (!c.cantidad) { set({ ia: {} }); return }
+    if (c.leyendo || (!c.monto && !c.referencia)) return
+    onLeido(c)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firma])
+
   function onLeido(d) {
     const patch = { ia: {} }
     if (d.monto) { patch.monto = montoInput(d.monto); patch.montoManual = true; patch.ia.monto = true }
@@ -109,7 +121,8 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
     if (esCobrar && !esAliado && !f.cliente.trim()) return 'Escribe la empresa.'
     if (esCobrar && !textoProductos(f.cantidades, productos)) return 'Agrega al menos un producto a la orden.'
     if (tipo === 'gasto' && !f.categoria) return 'Elige una categoría.'
-    if (f.capture?.estado === 'leyendo') return 'Espera a que termine de leer el capture.'
+    if (lectura.leyendo) return 'Espera a que termine de leer el capture.'
+    if (lectura.monedasDistintas) return 'Los captures son de monedas distintas (Bs y $). Regístralos como ventas separadas.'
     return null
   }
 
@@ -131,7 +144,7 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
           tipo, request_id: requestId.current, fecha: f.fecha, monto: montoNum, moneda, tasa: moneda === 'Bs' ? tasa : tasaDia?.tasa || 0,
           tasa_editada: editTasa, monto_usd: montoUsd, monto_bs: moneda === 'Bs' ? montoNum : round2(montoNum * tasa),
           metodo: f.metodo, referencia: f.referencia.trim(),
-          capture: f.capture?.blob || null, confirmar_duplicado: confirmarDuplicado,
+          captures: f.captures.filter((c) => c.blob).map((c) => c.blob), confirmar_duplicado: confirmarDuplicado,
           ...(tipo === 'venta'
             ? { cliente: f.cliente.trim(), productos: productosTxt, cantidad: cantidadTotal, banco: f.banco.trim(), items, ...canal }
             : { categoria: f.categoria, concepto: f.concepto.trim(), proveedor: f.proveedor.trim() }),
@@ -165,7 +178,7 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
 
       <main className="screen-body" style={{ paddingTop: 16 }}>
         {!esCobrar && (
-          <CaptureField capture={f.capture} onChange={(c) => set({ capture: c, ...(c ? {} : { ia: {} }) })} onLeido={onLeido} />
+          <CaptureField captures={f.captures} onChange={(fn) => { setF((prev) => ({ ...prev, captures: fn(prev.captures) })); setError(null) }} />
         )}
 
         {esCobrar && (
@@ -195,6 +208,8 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
             </div>
           )}
         </div>
+
+        {lectura.cantidad > 1 && <AvisoCaptures lectura={lectura} />}
 
         {f.montoManual && totalUsd > 0 && Math.abs(montoNum - montoAuto) > 0.009 && (
           <p className="hint">
@@ -336,3 +351,4 @@ export default function Registro({ tipoInicial = 'venta', back, notify, producto
     </div>
   )
 }
+

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { Chips, Segmented, Sheet, Spinner, TopBar } from '../components/ui.jsx'
-import CaptureField from '../components/CaptureField.jsx'
+import CaptureField, { AvisoCaptures } from '../components/CaptureField.jsx'
+import { combinarLecturas, firmaCaptures } from '../lib/captures.js'
 import { api } from '../api/index.js'
 import { formatBs, formatMonto, formatUsd, montoInput, parseMonto, round2, toUsd } from '../lib/format.js'
 import { avisoFechaPago, fechaCorta, hoyISO, nombreDia } from '../lib/dates.js'
@@ -95,7 +96,7 @@ export default function PorCobrar({ back, go, notify }) {
 }
 
 function PagoSheet({ orden, onClose, onDone }) {
-  const [capture, setCapture] = useState(null)
+  const [captures, setCaptures] = useState([])
   const [tasaDia, setTasaDia] = useState(null)
   const [tasaTxt, setTasaTxt] = useState('')
   const [moneda, setMoneda] = useState('Bs')
@@ -135,6 +136,17 @@ function PagoSheet({ orden, onClose, onDone }) {
   const comparar = orden.monto > 0 && montoNum > 0
   const parcial = comparar && diferencia <= -0.5
 
+  // Varios captures del mismo pago: se suman y las referencias quedan juntas.
+  const lectura = combinarLecturas(captures)
+  const firma = firmaCaptures(captures)
+  useEffect(() => {
+    const c = combinarLecturas(captures)
+    if (!c.cantidad) { setIa({}); return }
+    if (c.leyendo || (!c.monto && !c.referencia)) return
+    onLeido(c)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firma])
+
   function onLeido(d) {
     const nuevo = {}
     if (d.monto) { setMonto(montoInput(d.monto)); setMontoManual(true); nuevo.monto = true }
@@ -149,7 +161,8 @@ function PagoSheet({ orden, onClose, onDone }) {
   async function confirmar(confirmarDuplicado = false) {
     if (!(montoNum > 0)) return setError('Escribe el monto pagado.')
     if (moneda === 'Bs' && !(tasa > 0)) return setError('Falta la tasa del día.')
-    if (capture?.estado === 'leyendo') return setError('Espera a que termine de leer el capture.')
+    if (lectura.leyendo) return setError('Espera a que termine de leer el capture.')
+    if (lectura.monedasDistintas) return setError('Los captures son de monedas distintas. Regístralos como abonos separados.')
     setError(null)
     setGuardando(true)
     try {
@@ -157,7 +170,7 @@ function PagoSheet({ orden, onClose, onDone }) {
         request_id: requestId.current, orden: orden.orden, fecha, monto: montoNum, moneda, tasa,
         tasa_editada: tasaDia ? tasa !== tasaDia.tasa : true, monto_usd: montoUsd,
         monto_bs: moneda === 'Bs' ? montoNum : round2(montoNum * tasa), metodo, banco: banco.trim(),
-        referencia: referencia.trim(), capture: capture?.blob || null, confirmar_duplicado: confirmarDuplicado,
+        referencia: referencia.trim(), captures: captures.filter((c) => c.blob).map((c) => c.blob), confirmar_duplicado: confirmarDuplicado,
       })
       vibrar('success')
       onDone(r)
@@ -190,7 +203,7 @@ function PagoSheet({ orden, onClose, onDone }) {
         {abonado > 0 && <span className="abonos-linea">Pagado {formatUsd(abonado)} · faltan {formatUsd(saldoUsd)}</span>}
       </div>
 
-      <CaptureField capture={capture} onChange={(c) => { setCapture(c); if (!c) setIa({}) }} onLeido={onLeido} />
+      <CaptureField captures={captures} onChange={(fn) => { setCaptures(fn); setError(null) }} />
 
       <div className="monto-row">
         <label className="field">
@@ -203,6 +216,8 @@ function PagoSheet({ orden, onClose, onDone }) {
           <Segmented options={OPCIONES_MONEDA} value={moneda} onChange={(m) => { setMoneda(m); setMontoManual(false) }} label="Moneda" />
         </div>
       </div>
+
+      {lectura.cantidad > 1 && <AvisoCaptures lectura={lectura} />}
 
       {moneda === 'Bs' && (
         <label className="field">

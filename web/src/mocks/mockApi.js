@@ -102,12 +102,15 @@ function idempotente(req) {
   return false
 }
 
+// Varios captures: las referencias vienen juntas ("123 / 456"); se revisa cada una.
+const partesRef = (r) => String(r ?? '').split('/').map((x) => x.trim()).filter(Boolean)
 function refDuplicada(referencia, excluirId) {
-  if (!referencia) return null
-  const ref = String(referencia).trim()
-  const v = db().ventas.find((x) => !x.anulado && x.id !== excluirId && String(x.referencia).trim() === ref)
+  const buscadas = partesRef(referencia)
+  if (!buscadas.length) return null
+  const coincide = (r) => partesRef(r).some((x) => buscadas.includes(x))
+  const v = db().ventas.find((x) => !x.anulado && x.id !== excluirId && coincide(x.referencia))
   if (v) return { tipo: 'venta', fecha: v.fecha, monto: v.monto, moneda: v.moneda, cliente: v.cliente }
-  const g = db().gastos.find((x) => !x.anulado && String(x.referencia).trim() === ref)
+  const g = db().gastos.find((x) => !x.anulado && coincide(x.referencia))
   if (g) return { tipo: 'gasto', fecha: g.fecha, monto: g.monto, moneda: g.moneda, cliente: g.concepto }
   return null
 }
@@ -218,14 +221,14 @@ export const mockApi = {
     const id = (req.tipo === 'gasto' ? 'G-' : 'V-') + new Date().toISOString().replace(/\D/g, '').slice(2, 8) + '-' + String(++d.seq).padStart(6, '0')
     const base = { id, fecha: req.fecha, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, referencia: req.referencia || '', registrado_por: u.nombre, anulado: false, creado: new Date().toISOString() }
     if (req.tipo === 'venta') {
-      const v = { ...base, cliente: req.cliente || cn.aliado, aliado: cn.aliado, productos: req.productos, cantidad: req.cantidad, banco: req.banco, origen: 'webapp', orden: '', capture: req.capture ? '(capture de prueba)' : '' }
+      const v = { ...base, cliente: req.cliente || cn.aliado, aliado: cn.aliado, productos: req.productos, cantidad: req.cantidad, banco: req.banco, origen: 'webapp', orden: '', capture: req.captures?.length ? `(${req.captures.length} capture(s) de prueba)` : '' }
       d.ventas.push(v)
       registrarDetalle(req.items, req.fecha, v.id)
       save()
       return { ok: true, id: v.id }
     }
     if (req.tipo === 'gasto') {
-      const g = { ...base, categoria: req.categoria, concepto: req.concepto, proveedor: req.proveedor, capture: req.capture ? '(capture de prueba)' : '' }
+      const g = { ...base, categoria: req.categoria, concepto: req.concepto, proveedor: req.proveedor, capture: req.captures?.length ? `(${req.captures.length} capture(s) de prueba)` : '' }
       d.gastos.push(g)
       save()
       return { ok: true, id: g.id }
@@ -273,7 +276,7 @@ export const mockApi = {
     o.monto_pagado = req.monto
     o.moneda_pago = req.moneda
     o.metodo_pago = req.metodo
-    d.ventas.push({ id: nextId('V-'), fecha: req.fecha, cliente: o.cliente, aliado: o.aliado || '', productos: o.productos, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, banco: req.banco || '', referencia: req.referencia || '', origen: 'webapp', registrado_por: u.nombre, orden: o.orden, anulado: false, creado: new Date().toISOString(), capture: req.capture ? '(capture de prueba)' : '' })
+    d.ventas.push({ id: nextId('V-'), fecha: req.fecha, cliente: o.cliente, aliado: o.aliado || '', productos: o.productos, monto: req.monto, moneda: req.moneda, tasa: req.tasa, monto_usd: toUsd(req.monto, req.moneda, req.tasa), metodo: req.metodo, banco: req.banco || '', referencia: req.referencia || '', origen: 'webapp', registrado_por: u.nombre, orden: o.orden, anulado: false, creado: new Date().toISOString(), capture: req.captures?.length ? `(${req.captures.length} capture(s) de prueba)` : '' })
     save()
     return { ok: true, cerrada, pagado_usd: pagado, saldo_usd: cerrada ? 0 : round2(antes.monto_usd - pagado) }
   },

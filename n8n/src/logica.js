@@ -245,11 +245,14 @@ function porCobrar(ctx, h, res) {
     hay_bs: ordenes.some((o) => o.moneda === 'Bs'), proximo_numero: Math.max(0, ...todas.map((o) => o.orden)) + 1 });
 }
 
+// Un pago en partes (varios captures) guarda sus referencias juntas: "123 / 456". Se revisa cada una.
+const partesRef = (ref) => txt(ref).replace(/^'/, '').split('/').map((x) => x.trim()).filter(Boolean);
 function buscarReferencia(h, ref) {
-  const r = txt(ref).replace(/^'/, ''); if (!r) return null;
-  const v = h.Ventas.filas.map(venta).find((x) => !x.anulado && x.referencia === r);
+  const buscadas = partesRef(ref); if (!buscadas.length) return null;
+  const coincide = (r) => partesRef(r).some((x) => buscadas.includes(x));
+  const v = h.Ventas.filas.map(venta).find((x) => !x.anulado && coincide(x.referencia));
   if (v) return { tipo: 'venta', fecha: v.fecha, monto: v.monto, moneda: v.moneda, cliente: v.cliente || v.producto };
-  const g = h.Gastos.filas.map(gasto).find((x) => !x.anulado && x.referencia === r);
+  const g = h.Gastos.filas.map(gasto).find((x) => !x.anulado && coincide(x.referencia));
   return g ? { tipo: 'gasto', fecha: g.fecha, monto: g.monto, moneda: g.moneda, cliente: g.concepto } : null;
 }
 function yaProcesado(h, rid) {

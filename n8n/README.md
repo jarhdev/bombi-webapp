@@ -64,3 +64,12 @@ Los aliados compran a un precio menor, igual para todos.
 
 La ruta `productos` devuelve `{ productos (con precio_aliado), aliados }`. `registro` acepta `canal: 'aliado'` y `aliado: <nombre>`.
 `Leer hojas` lee Ventas A:V, Por cobrar A:U, Productos A:H, Detalle ventas A:K y Aliados A:D.
+
+## Varios captures por pago (2026-10-20)
+
+Cuando un cliente paga el total en varias transferencias, la app permite adjuntar hasta 5 captures en Nueva venta (y gasto) y en "Registrar pago" de Por cobrar.
+
+- Cada capture se lee con IA por separado (`leer-capture`). La app suma los montos y une las referencias con " / ". Todos los captures deben ser de la misma moneda.
+- Se guarda **una sola fila** en Ventas (o un solo cobro). La app manda los archivos como `capture`, `capture_2`, `capture_3`…
+- "Preparar subida" sube cada capture a Drive (`V-…`, `V-…-2`, `V-…-3`) y "Completar link" escribe todos los links en la misma celda "Link capture", uno por línea.
+- Al revisar referencias repetidas, cada referencia del grupo se compara por separado: si "222" ya estaba dentro de "111 / 222", la app avisa.

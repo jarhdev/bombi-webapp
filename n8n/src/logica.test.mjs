@@ -354,3 +354,20 @@ test('aliados: precio aliado, venta y orden marcadas, cobro hereda el aliado', (
   // Sin la pestaña Aliados: la venta normal sigue funcionando.
   assert.equal(llamar('registro', { ...base, canal: 'regular', referencia: 'A4', request_id: 'a4' }, { token: t }).status, 200)
 })
+
+test('varios captures: referencias juntas, cada una se revisa contra las ya registradas', () => {
+  const t = login()
+  const l = conPin(fixture(), 'Jose', '1234')
+  const base = { tipo: 'venta', monto: 4378.5, moneda: 'Bs', tasa: 874.73, metodo: 'Pago Móvil', productos: '2x NY Nutella 100g' }
+  const v = llamar('registro', { ...base, referencia: '111 / 222', request_id: 'mc1' }, { token: t, lectura: l, tieneCapture: true })
+  assert.equal(v.status, 200, JSON.stringify(v.respuesta))
+  const fila = v.escrituras.find((x) => x.hoja === 'Ventas').fila
+  assert.ok(fila.includes("'111 / 222")); assert.ok(fila.includes('{{LINK_CAPTURE}}'))
+  aplicar(l, v)
+  // Una referencia nueva que ya estaba dentro del pago en partes: se avisa como repetida.
+  const r = llamar('registro', { ...base, referencia: '222', request_id: 'mc2' }, { token: t, lectura: l })
+  assert.equal(r.status, 409)
+  const r2 = llamar('registro', { ...base, referencia: '333 / 111', request_id: 'mc3' }, { token: t, lectura: l })
+  assert.equal(r2.status, 409)
+  assert.equal(llamar('registro', { ...base, referencia: '1112', request_id: 'mc4' }, { token: t, lectura: l }).status, 200)
+})

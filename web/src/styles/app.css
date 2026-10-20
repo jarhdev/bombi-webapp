@@ -325,3 +325,6 @@ textarea.input { height: auto; min-height: 72px; padding: 10px 14px; resize: ver
 .prod-row.precio-cols { padding-right: 8px; }
 .tag-aliado { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; vertical-align: 2px;
   background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+
+/* Varios captures del mismo pago */
+.captures { display: flex; flex-direction: column; gap: 10px; }

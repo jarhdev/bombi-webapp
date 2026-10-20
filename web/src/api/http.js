@@ -34,11 +34,13 @@ async function request(path, { method = 'GET', json, form } = {}) {
   return data
 }
 
-// Arma un multipart con los campos en "data" (JSON) y el capture como archivo.
-function multipart(campos, capture) {
+// Arma un multipart con los campos en "data" (JSON) y los captures como archivos:
+// "capture" el primero y "capture_2", "capture_3"… los demás (pagos en partes).
+function multipart(campos, captures) {
   const form = new FormData()
   form.append('data', JSON.stringify(campos))
-  if (capture) form.append('capture', capture, 'capture.jpg')
+  const lista = (Array.isArray(captures) ? captures : [captures]).filter(Boolean)
+  lista.forEach((c, i) => form.append(i ? `capture_${i + 1}` : 'capture', c, i ? `capture-${i + 1}.jpg` : 'capture.jpg'))
   return form
 }
 
@@ -51,9 +53,9 @@ export const httpApi = {
   tasa: () => post('tasa'),
   actualizarTasa: () => post('tasa-actualizar'),
   leerCapture: (blob) => request('/leer-capture', { method: 'POST', form: multipart({}, blob) }),
-  registrar: ({ capture, ...campos }) => request('/registro', { method: 'POST', form: multipart(campos, capture) }),
+  registrar: ({ captures, ...campos }) => request('/registro', { method: 'POST', form: multipart(campos, captures) }),
   porCobrar: () => post('por-cobrar'),
-  cobrar: ({ capture, ...campos }) => request('/cobrar', { method: 'POST', form: multipart(campos, capture) }),
+  cobrar: ({ captures, ...campos }) => request('/cobrar', { method: 'POST', form: multipart(campos, captures) }),
   anular: (body) => post('anular', body),
   productos: () => post('productos'),
   inventario: () => post('inventario'),
