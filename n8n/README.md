@@ -86,6 +86,6 @@ En Por cobrar, las columnas de pago (`Metodo de pago`, `Referencia`, `Moneda pag
 
 Cantidades vendidas por mes, separando **clientes** y **aliados** (columna `Canal` de `Detalle ventas`; vacío = cliente), en grupos: NY 100g, NY 160g, Thin Cookies, Banana Bread, Brownie, Pack Chocochips y Otros. Las NY Cookies se agrupan por `Categoría` + `Presentación` de Productos, así que los sabores nuevos entran solos.
 
-- **Sheet:** pestaña `Vendidos por mes`, con dos fórmulas (A3 = meses, B3 = toda la tabla) sobre `Detalle ventas` + `Productos`. Sin anulados.
-- **App:** Inventario → "Vendidos por mes" (selector de mes; columnas Clientes / Aliados / Total). La ruta `inventario` devuelve `grupos` y `meses` (últimos 12).
+- **Sheet:** pestaña `Vendidos por mes`, con dos fórmulas (A3 = meses con nombre, "Octubre 2026"; B3 = toda la tabla) sobre `Detalle ventas` + `Productos`. Sin anulados. El mes en curso aparece aunque no tenga ventas.
+- **App:** Inventario → "Vendidos por mes" (selector por nombre del mes, "Octubre", con el año solo si es de otro año; columnas Clientes / Aliados / Total). La ruta `inventario` devuelve `grupos` y `meses` (últimos 12).
 - Igual que "Vendidos por semana", solo cuenta lo que tiene detalle: ventas y órdenes de la app y el historial cargado. Las ventas del bot de Telegram no tienen detalle por producto.

@@ -16,8 +16,9 @@ function porSabor(productos) {
   return [...m.entries()].map(([sabor, vs]) => ({ sabor, variantes: vs.sort((a, b) => parseFloat(a.presentacion) - parseFloat(b.presentacion)) }))
 }
 
-const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-const nombreMes = (ym) => { const [y, m] = ym.split('-').map(Number); return `${MESES[m - 1]} ${y}` }
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+// "Octubre" para los meses de este año; "Diciembre 2025" para los de otro año.
+const nombreMes = (ym, anioActual) => { const [y, m] = ym.split('-').map(Number); return y === anioActual ? MESES[m - 1] : `${MESES[m - 1]} ${y}` }
 
 // Vendidos por mes: una fila por grupo (NY 100g, NY 160g, Thin…) y columnas Clientes / Aliados / Total.
 function VendidosMes({ grupos, mes }) {
@@ -56,7 +57,8 @@ export default function Inventario({ back, notify, usuario }) {
   const etiquetaSemana = (s) => (s.desde === actual ? 'Esta semana' : `${fechaCorta(s.desde)} – ${fechaCorta(s.hasta)}`)
   const sem = data?.semanas[semana]
   const etiquetas = data?.semanas.map(etiquetaSemana) || []
-  const etiquetasMes = data?.meses?.map((m) => (m.mes === hoyISO().slice(0, 7) ? 'Este mes' : nombreMes(m.mes))) || []
+  const anio = Number(hoyISO().slice(0, 4))
+  const etiquetasMes = data?.meses?.map((m) => nombreMes(m.mes, anio)) || []
   const mes = data?.meses?.[mesIdx]
 
   return (

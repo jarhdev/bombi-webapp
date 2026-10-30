@@ -423,3 +423,12 @@ test('vendidos por mes: separa clientes y aliados, NY 100g/160g y el resto, sin 
   const sep = r.meses.find((m) => m.mes === '2026-09')
   assert.equal(sep.clientes.ny160, 2); assert.equal(r.meses[0].mes, '2026-10')
 })
+
+test('vendidos por mes: al empezar un mes nuevo aparece vacío, antes del anterior', () => {
+  const l = conInventario(conPin(fixture(), 'Jose', '1234'))
+  hoja(l, 'Detalle ventas').push(['2026-10-20', '2026-10-19', 'ny-nutella-100', 'NY Nutella 100g', 2, 'venta', 'V-1', '', 'sí', 'webapp'])
+  const nov = new Date('2026-11-01T12:00:00Z')
+  const tok = llamar('auth', { nombre: 'Jose', pin: '1234' }, { lectura: l, ahora: nov }).respuesta.token
+  const r = llamar('inventario', {}, { token: tok, lectura: l, ahora: nov }).respuesta
+  assert.deepEqual(r.meses.map((m) => [m.mes, m.total]), [['2026-11', 0], ['2026-10', 2]])
+})
