@@ -71,11 +71,11 @@ function stockBajo() {
   const s = stockActual()
   return db().productos.filter(conStock).filter((p) => (s[p.id] || 0) < MINIMO).map((p) => ({ id: p.id, nombre: etiquetaProducto(p), stock: s[p.id] || 0 }))
 }
-function registrarDetalle(items, fecha, registro) {
+function registrarDetalle(items, fecha, registro, canal = 'regular') {
   const d = invDb()
   for (const it of items || []) {
     const p = d.productos.find((x) => x.id === it.id)
-    if (p && it.cantidad > 0) d.detalle.push({ id: p.id, nombre: etiquetaProducto(p), cantidad: it.cantidad, fecha, registro, anulado: false })
+    if (p && it.cantidad > 0) d.detalle.push({ id: p.id, nombre: etiquetaProducto(p), cantidad: it.cantidad, fecha, registro, anulado: false, canal })
   }
 }
 const anularDetalle = (registro) => { for (const x of invDb().detalle) if (x.registro === registro) x.anulado = true }
@@ -223,7 +223,7 @@ export const mockApi = {
     if (req.tipo === 'venta') {
       const v = { ...base, cliente: req.cliente || cn.aliado, aliado: cn.aliado, productos: req.productos, cantidad: req.cantidad, banco: req.banco, origen: 'webapp', orden: '', capture: req.captures?.length ? `(${req.captures.length} capture(s) de prueba)` : '' }
       d.ventas.push(v)
-      registrarDetalle(req.items, req.fecha, v.id)
+      registrarDetalle(req.items, req.fecha, v.id, cn.canal)
       save()
       return { ok: true, id: v.id }
     }
@@ -235,7 +235,7 @@ export const mockApi = {
     }
     if (req.tipo === 'cobrar') {
       const orden = Math.max(0, ...d.porCobrar.map((o) => o.orden)) + 1
-      registrarDetalle(req.items, req.fecha_entrega, `O-${orden}`)
+      registrarDetalle(req.items, req.fecha_entrega, `O-${orden}`, cn.canal)
       d.porCobrar.push({ orden, fecha_entrega: req.fecha_entrega, cliente: req.cliente || cn.aliado, aliado: cn.aliado, productos: req.productos, monto: req.monto, moneda: 'USD', fecha_esperada_pago: req.fecha_esperada_pago, estado: 'pendiente', fecha_pago: '', referencia: '', registrado_por: u.nombre, creado: new Date().toISOString() })
       save()
       return { ok: true, orden }
@@ -326,7 +326,21 @@ export const mockApi = {
       const ps = Object.values(sem[desde]).sort((a, b) => b.cantidad - a.cantidad)
       return { desde, hasta: addDays(desde, 6), productos: ps, total: ps.reduce((t, p) => t + p.cantidad, 0) }
     })
-    return { disponible: true, productos, semanas }
+    // Vendidos por mes (igual que n8n): grupos NY 100g/160g, Thin, Banana, Brownie, Pack y Otros; clientes vs aliados.
+    const POR_ID = { 'thin-40': 'thin', 'banana-500': 'banana', 'brownie-150': 'brownie', 'chocochips-5': 'pack' }
+    const grupoDe = (id) => { const p = d.productos.find((x) => x.id === id); if (p?.categoria === 'NY Cookies') return p.presentacion === '100g' ? 'ny100' : p.presentacion === '160g' ? 'ny160' : 'otros'; return POR_ID[id] || 'otros' }
+    const grupos = [['ny100', 'NY 100g'], ['ny160', 'NY 160g'], ['thin', 'Thin Cookies'], ['banana', 'Banana Bread'], ['brownie', 'Brownie'], ['pack', 'Pack Chocochips'], ['otros', 'Otros']].map(([id, nombre]) => ({ id, nombre }))
+    const vacio = () => Object.fromEntries([...grupos.map((g) => [g.id, 0]), ['total', 0]])
+    const ms = {}
+    for (const x of d.detalle) {
+      if (x.anulado) continue
+      const m = (ms[x.fecha.slice(0, 7)] ??= { clientes: vacio(), aliados: vacio() })
+      const lado = x.canal === 'aliado' ? m.aliados : m.clientes
+      lado[grupoDe(x.id)] += x.cantidad; lado.total += x.cantidad
+    }
+    ms[hoyISO().slice(0, 7)] ??= { clientes: vacio(), aliados: vacio() }
+    const meses = Object.keys(ms).sort().reverse().slice(0, 12).map((mes) => ({ mes, ...ms[mes], total: ms[mes].clientes.total + ms[mes].aliados.total }))
+    return { disponible: true, productos, semanas, grupos, meses }
   },
 
   async inventarioMover(req) {

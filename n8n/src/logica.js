@@ -486,6 +486,33 @@ function stockBajo(h) {
   const s = stockActual(h);
   return controlados(h).filter((f) => (s[txt(f.id)] || 0) < minimoDe(f)).map((f) => ({ id: txt(f.id), nombre: etiqueta(f), stock: s[txt(f.id)] || 0 }));
 }
+// Vendidos por mes: cantidades por grupo de producto, separando clientes y aliados (columna Canal de Detalle ventas).
+const GRUPOS_MES = [['ny100', 'NY 100g'], ['ny160', 'NY 160g'], ['thin', 'Thin Cookies'], ['banana', 'Banana Bread'],
+  ['brownie', 'Brownie'], ['pack', 'Pack Chocochips'], ['otros', 'Otros']];
+const GRUPO_POR_ID = { 'thin-40': 'thin', 'banana-500': 'banana', 'brownie-150': 'brownie', 'chocochips-5': 'pack' };
+function grupoMes(f, id) {
+  if (f && txt(f['Categoría']) === 'NY Cookies') {
+    const p = sinAcentos(f['Presentación']).replace(/\s/g, '');
+    return p === '100g' ? 'ny100' : p === '160g' ? 'ny160' : 'otros';
+  }
+  return GRUPO_POR_ID[id] || 'otros';
+}
+function vendidosPorMes(h, hoy) {
+  const cat = {}; for (const f of h.Productos.filas) cat[txt(f.id)] = f;
+  const vacio = () => Object.fromEntries([...GRUPOS_MES.map(([g]) => [g, 0]), ['total', 0]]);
+  const meses = {};
+  for (const f of hojaOpc(h, 'Detalle ventas').filas) {
+    if (esSi(f.Anulado)) continue;
+    const fecha = fechaCelda(f.Fecha); if (!fecha) continue;
+    const mes = fecha.slice(0, 7); const id = txt(f['Producto id']); const n = num(f.Cantidad);
+    const m = (meses[mes] = meses[mes] || { clientes: vacio(), aliados: vacio() });
+    const lado = sinAcentos(f.Canal) === 'aliado' ? m.aliados : m.clientes;
+    lado[grupoMes(cat[id], id)] += n; lado.total += n;
+  }
+  const actual = hoy.slice(0, 7); meses[actual] = meses[actual] || { clientes: vacio(), aliados: vacio() };
+  return Object.keys(meses).sort().reverse().slice(0, 12).map((mes) => ({ mes, ...meses[mes], total: meses[mes].clientes.total + meses[mes].aliados.total }));
+}
+
 function inventario(ctx, h, res) {
   const s = stockActual(h);
   const productos = controlados(h).filter((f) => esSi(f.Activo) || (s[txt(f.id)] || 0) !== 0).map((f) => {
@@ -505,7 +532,8 @@ function inventario(ctx, h, res) {
     const productos = Object.values(sem[desde]).sort((a, b) => b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre));
     return { desde, hasta: sumarDias(desde, 6), productos, total: productos.reduce((t, p) => t + p.cantidad, 0) };
   });
-  return res(200, { disponible: !!h.Inventario && !!h['Detalle ventas'], productos, semanas });
+  return res(200, { disponible: !!h.Inventario && !!h['Detalle ventas'], productos, semanas,
+    grupos: GRUPOS_MES.map(([id, nombre]) => ({ id, nombre })), meses: vendidosPorMes(h, hoy) });
 }
 function inventarioMover(ctx, h, res, u) {
   const b = ctx.body; const I = h.Inventario; const c = caracas(ctx.ahora);

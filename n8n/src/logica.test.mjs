@@ -397,3 +397,29 @@ test('abonos: Por cobrar guarda todos los pagos juntos y se corrige al anular un
   const an = llamar('anular', { tipo: 'venta', id: 'V-A1' }, { token: t, lectura })
   assert.equal(valor(an, 'Referencia').valor, ''); assert.equal(valor(an, 'Link capture').valor, '')
 })
+
+test('vendidos por mes: separa clientes y aliados, NY 100g/160g y el resto, sin anulados', () => {
+  const t = login()
+  const l = conAliados(conInventario(conPin(fixture(), 'Jose', '1234')))
+  hoja(l, 'Detalle ventas')[0].push('Canal')
+  const prod = hoja(l, 'Productos')
+  for (const r of [['ny-nutella-160', 'NY Nutella', 'NY Cookies', '160g', 3.5, 'sí'], ['thin-40', 'Thin Cookies', 'Otros', '40g', 2, 'sí'],
+    ['banana-500', 'Banana Bread', 'Otros', '500g', 4.5, 'sí'], ['chocochips-5', 'Chocochips', 'Otros', 'Pack de 5', 2, 'sí']]) if (!prod.some((x) => x[0] === r[0])) prod.push(r)
+  const base = { tipo: 'venta', monto: 10, moneda: 'USD', metodo: 'Zelle' }
+  const it = (id, cantidad) => ({ id, cantidad })
+  aplicar(l, llamar('registro', { ...base, referencia: 'M1', request_id: 'm1', items: [it('ny-nutella-100', 3), it('ny-nutella-160', 1), it('banana-500', 1)] }, { token: t, lectura: l }))
+  aplicar(l, llamar('registro', { ...base, canal: 'aliado', aliado: 'Café Lumen', referencia: 'M2', request_id: 'm2', items: [it('ny-nutella-100', 5), it('thin-40', 2), it('chocochips-5', 1), it('brownie-150', 2)] }, { token: t, lectura: l }))
+  // Una venta anulada no cuenta.
+  const det = hoja(l, 'Detalle ventas')
+  det.push(['2026-10-07', '2026-10-05', 'ny-nutella-100', 'NY Nutella 100g', 9, 'venta', 'V-X', 'sí', 'sí', 'webapp', 'regular'])
+  // Un mes anterior (histórico, sin Canal = clientes).
+  det.push([46281, 46279, 'ny-nutella-160', 'NY Nutella 160g', 2, 'venta', 'V-OLD', '', 'no', 'histórico'])
+  const r = llamar('inventario', {}, { token: t, lectura: l }).respuesta
+  assert.deepEqual(r.grupos.map((g) => g.id), ['ny100', 'ny160', 'thin', 'banana', 'brownie', 'pack', 'otros'])
+  const oct = r.meses.find((m) => m.mes === '2026-10')
+  assert.deepEqual([oct.clientes.ny100, oct.clientes.ny160, oct.clientes.banana, oct.clientes.total], [3, 1, 1, 5])
+  assert.deepEqual([oct.aliados.ny100, oct.aliados.thin, oct.aliados.pack, oct.aliados.brownie, oct.aliados.total], [5, 2, 1, 2, 10])
+  assert.equal(oct.total, 15)
+  const sep = r.meses.find((m) => m.mes === '2026-09')
+  assert.equal(sep.clientes.ny160, 2); assert.equal(r.meses[0].mes, '2026-10')
+})

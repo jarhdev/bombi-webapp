@@ -16,11 +16,34 @@ function porSabor(productos) {
   return [...m.entries()].map(([sabor, vs]) => ({ sabor, variantes: vs.sort((a, b) => parseFloat(a.presentacion) - parseFloat(b.presentacion)) }))
 }
 
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const nombreMes = (ym) => { const [y, m] = ym.split('-').map(Number); return `${MESES[m - 1]} ${y}` }
+
+// Vendidos por mes: una fila por grupo (NY 100g, NY 160g, Thin…) y columnas Clientes / Aliados / Total.
+function VendidosMes({ grupos, mes }) {
+  const filas = grupos.filter((g) => g.id !== 'otros' || mes.clientes.otros + mes.aliados.otros > 0)
+  return (
+    <section className="card vend-mes" aria-label={`Vendidos en ${nombreMes(mes.mes)}`}>
+      <div className="vm-row head"><span>Producto</span><span>Clientes</span><span>Aliados</span><span>Total</span></div>
+      {filas.map((g) => {
+        const c = mes.clientes[g.id], a = mes.aliados[g.id]
+        return (
+          <div className={`vm-row${c + a === 0 ? ' cero' : ''}`} key={g.id}>
+            <span>{g.nombre}</span><span>{c}</span><span>{a}</span><strong>{c + a}</strong>
+          </div>
+        )
+      })}
+      <div className="vm-row total"><span>Total</span><span>{mes.clientes.total}</span><span>{mes.aliados.total}</span><strong>{mes.total}</strong></div>
+    </section>
+  )
+}
+
 export default function Inventario({ back, notify, usuario }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [modo, setModo] = useState(null) // 'entrada' | 'conteo'
   const [semana, setSemana] = useState(0)
+  const [mesIdx, setMesIdx] = useState(0)
 
   const cargar = useCallback(() => {
     setError(null)
@@ -33,6 +56,8 @@ export default function Inventario({ back, notify, usuario }) {
   const etiquetaSemana = (s) => (s.desde === actual ? 'Esta semana' : `${fechaCorta(s.desde)} – ${fechaCorta(s.hasta)}`)
   const sem = data?.semanas[semana]
   const etiquetas = data?.semanas.map(etiquetaSemana) || []
+  const etiquetasMes = data?.meses?.map((m) => (m.mes === hoyISO().slice(0, 7) ? 'Este mes' : nombreMes(m.mes))) || []
+  const mes = data?.meses?.[mesIdx]
 
   return (
     <div className="screen">
@@ -79,6 +104,14 @@ export default function Inventario({ back, notify, usuario }) {
               ))}
               {sem.productos.length > 0 && <div className="vend-row total"><span>Total</span><strong>{sem.total}</strong></div>}
             </section>
+          </>
+        )}
+
+        {mes && data.grupos && (
+          <>
+            <h2 className="section-title">Vendidos por mes</h2>
+            <Chips options={etiquetasMes} value={etiquetasMes[mesIdx]} onChange={(l) => setMesIdx(etiquetasMes.indexOf(l))} label="Mes" />
+            <VendidosMes grupos={data.grupos} mes={mes} />
           </>
         )}
       </main>
