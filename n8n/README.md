@@ -88,4 +88,5 @@ Cantidades vendidas por mes, separando **clientes** y **aliados** (columna `Cana
 
 - **Sheet:** pestaña `Vendidos por mes`, con dos fórmulas (A3 = meses con nombre, "Octubre 2026"; B3 = toda la tabla) sobre `Detalle ventas` + `Productos`. Sin anulados. El mes en curso aparece aunque no tenga ventas.
 - **App:** Inventario → "Vendidos por mes" (selector por nombre del mes, "Octubre", con el año solo si es de otro año; columnas Clientes / Aliados / Total). La ruta `inventario` devuelve `grupos` y `meses` (últimos 12).
+- Cuenta galletas **entregadas**: las órdenes de Por cobrar entran una sola vez, en el mes de su fecha de entrega, estén cobradas o no (los cobros y abonos no vuelven a sumar; las órdenes anuladas se restan).
 - Igual que "Vendidos por semana", solo cuenta lo que tiene detalle: ventas y órdenes de la app y el historial cargado. Las ventas del bot de Telegram no tienen detalle por producto.
