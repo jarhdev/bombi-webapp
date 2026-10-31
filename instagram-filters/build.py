@@ -1,7 +1,8 @@
 """Genera el marco de historias de Instagram de Bombi (1080x1920).
 
 Estilo "marco de evento": la foto queda libre y la decoración vive solo
-arriba (cintas satinadas + logo) y abajo (credencial, moño, @usuario).
+arriba (cintas satinadas + logo) y abajo (botón de campaña, lazo rosa
+contra el cáncer de mama, @usuario).
 
 Uso:  python3 instagram-filters/build.py [foto_de_fondo_para_preview]
 Salida: instagram-filters/output/bombi-story-frame.png  (overlay transparente)
@@ -31,16 +32,6 @@ def hexc(rgb):
 
 def data_uri(path):
     return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
-
-
-def tinted(path, rgb):
-    """Copia del PNG con todos los píxeles de un color (conserva la transparencia)."""
-    im = Image.open(path).convert("RGBA")
-    solid = Image.new("RGBA", im.size, rgb + (255,))
-    solid.putalpha(im.split()[3])
-    out = OUT / f"_{path.stem}-{hexc(rgb)[1:]}.png"
-    solid.save(out)
-    return out
 
 
 # ---------------------------------------------------------------- cintas
@@ -127,44 +118,40 @@ def bottom_ribbons():
     ])
 
 
-def bow(cx, cy):
-    """Moño satinado (reemplaza las galletas)."""
-    return "".join([
-        ribbon([((cx - 6, cy + 10), (cx - 30, cy + 70), (cx - 90, cy + 110), (cx - 80, cy + 190))], 46, PINK, 0.5, 0.2),
-        ribbon([((cx + 6, cy + 10), (cx + 40, cy + 70), (cx + 30, cy + 140), (cx + 90, cy + 190))], 46, PINK, 0.5, 2.6),
-        ribbon([((cx, cy), (cx - 60, cy - 110), (cx - 170, cy - 40), (cx - 120, cy + 20)),
-                ((cx - 120, cy + 20), (cx - 90, cy + 60), (cx - 30, cy + 30), (cx, cy))], 56, PINK, 0.35, 0.0, 0.6),
-        ribbon([((cx, cy), (cx + 60, cy - 110), (cx + 170, cy - 40), (cx + 120, cy + 20)),
-                ((cx + 120, cy + 20), (cx + 90, cy + 60), (cx + 30, cy + 30), (cx, cy))], 56, PINK, 0.35, 0.0, -0.6),
-        f'<rect x="{cx - 26}" y="{cy - 30}" width="52" height="60" rx="18" fill="{hexc(BURGUNDY)}"/>',
-        f'<rect x="{cx - 14}" y="{cy - 22}" width="10" height="44" rx="5" fill="#fff" opacity=".2"/>',
-    ])
+def awareness_ribbon(cx, cy):
+    """Lazo rosa de la lucha contra el cáncer de mama."""
+    rosa = (236, 120, 160)
+    legs = [
+        ((cx - 85, cy + 175), (cx - 30, cy + 95), (cx + 12, cy + 40), (cx + 40, cy - 30)),
+        ((cx + 40, cy - 30), (cx + 74, cy - 115), (cx + 22, cy - 158), (cx, cy - 158)),
+        ((cx, cy - 158), (cx - 22, cy - 158), (cx - 74, cy - 115), (cx - 40, cy - 30)),
+        ((cx - 40, cy - 30), (cx - 12, cy + 40), (cx + 30, cy + 95), (cx + 85, cy + 175)),
+    ]
+    return ribbon(legs, 48, rosa, 0.12, 0.25, 0.9)
 
 
-def lanyard(girl, wordmark_burgundy):
-    """Credencial colgante con el logo, abajo a la izquierda."""
-    straps = (
-        ribbon([((40, 1330), (70, 1450), (110, 1560), (145, 1640))], 30, BURGUNDY, 0.4, 0.1)
-        + ribbon([((140, 1360), (170, 1460), (170, 1560), (155, 1640))], 30, PINK, 0.4, 0.5)
-    )
-    b, c = hexc(BURGUNDY), hexc(CREAM)
-    card = f"""
-    <g transform="translate(150 1650) rotate(-8)">
-      <circle cx="0" cy="0" r="16" fill="none" stroke="#d9d3c7" stroke-width="7"/>
-      <g filter="url(#soft)">
-        <rect x="-95" y="14" width="190" height="230" rx="24" fill="{c}" stroke="{b}" stroke-width="8"/>
-      </g>
-      <rect x="-32" y="34" width="64" height="12" rx="6" fill="{b}" opacity=".55"/>
-      <image href="{girl}" x="-62" y="58" width="124" height="124"/>
-      <image href="{wordmark_burgundy}" x="-78" y="182" width="156" height="51"/>
+def campaign_pin(cx, cy, girl):
+    """Botón de campaña con el logo de Bombi."""
+    b, p, c = hexc(BURGUNDY), hexc(PINK), hexc(CREAM)
+    r = 128
+    ring = r - 22
+    return f"""
+    <g transform="translate({cx} {cy}) rotate(-8)">
+      <path id="pinRing" d="M 0 {ring} A {ring} {ring} 0 1 1 0.01 {ring}" fill="none"/>
+      <g filter="url(#soft)"><circle r="{r}" fill="#e9789f"/></g>
+      <circle r="{r - 6}" fill="none" stroke="{c}" stroke-width="3" opacity=".9"/>
+      <text font-family="Poppins" font-weight="700" font-size="20" letter-spacing="1.5" fill="{c}">
+        <textPath href="#pinRing" startOffset="50%" text-anchor="middle">♥ JUNTAS CONTRA EL CÁNCER DE MAMA ♥</textPath>
+      </text>
+      <circle r="{ring - 16}" fill="{c}" stroke="{b}" stroke-width="4"/>
+      <image href="{girl}" x="-80" y="-80" width="160" height="160"/>
+      <ellipse cx="-40" cy="-{r - 30}" rx="40" ry="14" fill="#fff" opacity=".18" transform="rotate(-30)"/>
     </g>"""
-    return straps + card
 
 
 def svg_markup():
     girl = data_uri(ASSETS / "bombi-girl-disc.png")
     wordmark = data_uri(ASSETS / "bombi-wordmark.png")
-    wordmark_b = data_uri(tinted(ASSETS / "bombi-wordmark.png", BURGUNDY))
     p, c = hexc(PINK), hexc(CREAM)
 
     return f"""
@@ -195,14 +182,11 @@ def svg_markup():
     <text x="430" y="282" font-family="Poppins" font-weight="600" font-size="27" letter-spacing="2" fill="{c}">HANDMADE COOKIES <tspan fill="{p}">&amp; BROWNIES</tspan></text>
   </g>
 
-  <!-- lateral -->
-  <text transform="translate(1032 1560) rotate(-90)" font-family="Lora" font-style="italic" font-size="34"
-        fill="{c}" opacity=".92" filter="url(#text)">Hecho a mano, horneado con amor</text>
 
   <!-- ABAJO -->
   <g filter="url(#glow)">{bottom_ribbons()}</g>
-  <g filter="url(#glow)">{lanyard(girl, wordmark_b)}</g>
-  <g filter="url(#glow)">{bow(905, 1715)}</g>
+  <g filter="url(#glow)">{campaign_pin(170, 1690, girl)}</g>
+  <g filter="url(#glow)">{awareness_ribbon(915, 1700)}</g>
 
   <g filter="url(#text)">
     <text x="560" y="1790" text-anchor="middle" font-family="Poppins" font-weight="700" font-size="60" fill="{c}">@bombive_</text>
@@ -253,8 +237,6 @@ def main(background=None):
     html = OUT / "bombi-story-frame.svg.html"
     html.write_text(HTML.format(svg=svg_markup()))
     render(html, OUT / "bombi-story-frame.png")
-    for tmp in OUT.glob("_*.png"):
-        tmp.unlink()
 
     overlay = Image.open(OUT / "bombi-story-frame.png").convert("RGBA")
     preview = (Image.open(background).convert("RGB").resize((W, H)) if background
