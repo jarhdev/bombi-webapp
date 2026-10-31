@@ -1,7 +1,7 @@
 """Genera el marco de historias de Instagram de Bombi (1080x1920).
 
 Estilo "marco de evento": la foto queda libre y la decoración vive solo
-arriba (cintas satinadas + logo) y abajo (botón de campaña, lazo rosa
+arriba (cintas satinadas + logo) y abajo (frase corta, lazo rosa
 contra el cáncer de mama, @usuario).
 
 Uso:  python3 instagram-filters/build.py [foto_de_fondo_para_preview]
@@ -130,25 +130,6 @@ def awareness_ribbon(cx, cy):
     return ribbon(legs, 48, rosa, 0.12, 0.25, 0.9)
 
 
-def campaign_pin(cx, cy, girl):
-    """Botón de campaña con el logo de Bombi."""
-    b, p, c = hexc(BURGUNDY), hexc(PINK), hexc(CREAM)
-    r = 128
-    ring = r - 22
-    return f"""
-    <g transform="translate({cx} {cy}) rotate(-8)">
-      <path id="pinRing" d="M 0 {ring} A {ring} {ring} 0 1 1 0.01 {ring}" fill="none"/>
-      <g filter="url(#soft)"><circle r="{r}" fill="#e9789f"/></g>
-      <circle r="{r - 6}" fill="none" stroke="{c}" stroke-width="3" opacity=".9"/>
-      <text font-family="Poppins" font-weight="700" font-size="20" letter-spacing="1.5" fill="{c}">
-        <textPath href="#pinRing" startOffset="50%" text-anchor="middle">♥ JUNTAS CONTRA EL CÁNCER DE MAMA ♥</textPath>
-      </text>
-      <circle r="{ring - 16}" fill="{c}" stroke="{b}" stroke-width="4"/>
-      <image href="{girl}" x="-80" y="-80" width="160" height="160"/>
-      <ellipse cx="-40" cy="-{r - 30}" rx="40" ry="14" fill="#fff" opacity=".18" transform="rotate(-30)"/>
-    </g>"""
-
-
 def svg_markup():
     girl = data_uri(ASSETS / "bombi-girl-disc.png")
     wordmark = data_uri(ASSETS / "bombi-wordmark.png")
@@ -185,7 +166,10 @@ def svg_markup():
 
   <!-- ABAJO -->
   <g filter="url(#glow)">{bottom_ribbons()}</g>
-  <g filter="url(#glow)">{campaign_pin(170, 1690, girl)}</g>
+  <g filter="url(#text)">
+    <text x="70" y="1690" font-family="Lora" font-style="italic" font-size="36" fill="{c}">Juntas,</text>
+    <text x="70" y="1734" font-family="Lora" font-style="italic" font-size="36" fill="{c}">más fuertes <tspan fill="#ec78a0">♥</tspan></text>
+  </g>
   <g filter="url(#glow)">{awareness_ribbon(915, 1700)}</g>
 
   <g filter="url(#text)">
