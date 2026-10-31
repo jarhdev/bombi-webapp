@@ -1,10 +1,15 @@
-"""Genera los marcos de historia de Instagram de Bombi (1080x1920).
+"""Genera el marco de historias de Instagram de Bombi (1080x1920).
 
-Uso:  python3 instagram-filters/build.py
-Salida: instagram-filters/output/*.png  (overlay transparente + vista previa)
+Estilo "marco de evento": la foto queda libre y la decoración vive solo
+arriba (cintas satinadas + logo) y abajo (credencial, moño, @usuario).
+
+Uso:  python3 instagram-filters/build.py [foto_de_fondo_para_preview]
+Salida: instagram-filters/output/bombi-story-frame.png  (overlay transparente)
+        instagram-filters/output/bombi-story-preview.jpg (vista previa)
 """
 import base64
 import json
+import math
 import pathlib
 import subprocess
 
@@ -15,164 +20,201 @@ ASSETS = ROOT / "assets"
 OUT = ROOT / "output"
 W, H = 1080, 1920
 
-BURGUNDY = "#6E1425"
-BURGUNDY_DARK = "#4E0D19"
-PINK = "#E59AA9"
-CREAM = "#F6EDDD"
-CARAMEL = "#C99A63"
+BURGUNDY = (110, 20, 37)
+PINK = (229, 154, 169)
+CREAM = (246, 237, 221)
+
+
+def hexc(rgb):
+    return "#%02x%02x%02x" % tuple(max(0, min(255, int(c))) for c in rgb)
 
 
 def data_uri(path):
     return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
 
 
-def drip_path(base, drips):
-    """Banda superior con goteo de chocolate. drips = [(x, ancho, largo)]."""
-    d = [f"M -40 -40 L {W + 40} -40 L {W + 40} {base}"]
-    for x, w, length in sorted(drips, reverse=True):
-        r = w / 2
-        s = w * 0.55  # suavizado del hombro
-        bottom = base + length
-        d.append(f"L {x + r + s} {base}")
-        d.append(f"C {x + r + s * 0.35} {base} {x + r} {base + s * 0.4} {x + r} {base + s}")
-        d.append(f"L {x + r} {bottom - r}")
-        d.append(f"A {r} {r} 0 0 1 {x - r} {bottom - r}")
-        d.append(f"L {x - r} {base + s}")
-        d.append(f"C {x - r} {base + s * 0.4} {x - r - s * 0.35} {base} {x - r - s} {base}")
-    d.append(f"L -40 {base} Z")
-    return " ".join(d)
+def tinted(path, rgb):
+    """Copia del PNG con todos los píxeles de un color (conserva la transparencia)."""
+    im = Image.open(path).convert("RGBA")
+    solid = Image.new("RGBA", im.size, rgb + (255,))
+    solid.putalpha(im.split()[3])
+    out = OUT / f"_{path.stem}-{hexc(rgb)[1:]}.png"
+    solid.save(out)
+    return out
 
 
-def scallop_path(top, radius):
-    """Base inferior con festón de caja de pastelería."""
-    n = round(W / (2 * radius))
-    step = W / n
-    d = [f"M -40 {H + 40} L -40 {top} L 0 {top}"]
-    for i in range(n):
-        x1 = (i + 1) * step
-        d.append(f"A {step / 2} {radius} 0 0 1 {x1} {top}")
-    d.append(f"L {W + 40} {top} L {W + 40} {H + 40} Z")
-    return " ".join(d)
+# ---------------------------------------------------------------- cintas
+
+def bezier(p0, p1, p2, p3, t):
+    u = 1 - t
+    return tuple(u**3 * a + 3 * u * u * t * b + 3 * u * t * t * c + t**3 * d
+                 for a, b, c, d in zip(p0, p1, p2, p3))
 
 
-TOP_DRIPS = [
-    (55, 30, 62), (150, 22, 32), (468, 28, 82), (532, 18, 34), (615, 34, 138),
-    (702, 20, 42), (790, 28, 72), (882, 40, 108), (975, 22, 38), (1042, 30, 64),
-]
+def sample(segments, n=60):
+    """segments: lista de curvas cúbicas [(p0, p1, p2, p3), ...]."""
+    pts = []
+    for seg in segments:
+        for i in range(n):
+            pts.append(bezier(*seg, i / n))
+    pts.append(segments[-1][3])
+    return pts
+
+
+def ribbon(segments, width, color, twists=0.6, phase=0.0, light=0.0):
+    """Cinta satinada que gira sobre sí misma, dibujada por tramos sombreados."""
+    pts = sample(segments)
+    n = len(pts)
+    edges = []
+    for i, (x, y) in enumerate(pts):
+        a = pts[max(i - 1, 0)]
+        b = pts[min(i + 1, n - 1)]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dx, dy) or 1
+        nx, ny = -dy / ln, dx / ln
+        theta = phase + 2 * math.pi * twists * i / (n - 1)
+        c = math.cos(theta)
+        half = width / 2 * max(abs(c), 0.12)
+        shade = 0.62 + 0.45 * abs(math.cos(theta - light))
+        if c < 0:  # revés de la cinta, un poco más oscuro
+            shade *= 0.82
+        edges.append(((x + nx * half, y + ny * half), (x - nx * half, y - ny * half), shade))
+    polys = []
+    for i in range(n - 1):
+        (l1, r1, s1), (l2, r2, s2) = edges[i], edges[i + 1]
+        s = (s1 + s2) / 2
+        # por encima de 1 se aclara hacia blanco (brillo satinado)
+        fill = hexc(tuple(ch * min(s, 1) + (255 - ch) * max(0, s - 1) * 2.5 for ch in color))
+        quad = " ".join(f"{px:.1f},{py:.1f}" for px, py in (l1, l2, r2, r1))
+        polys.append(f'<polygon points="{quad}" fill="{fill}" stroke="{fill}" '
+                     f'stroke-width="1.2" stroke-linejoin="round"/>')
+    return "".join(polys)
+
+
+def heart(x, y, s, fill, rot=0):
+    return (f'<path transform="translate({x} {y}) rotate({rot}) scale({s})" fill="{fill}" '
+            f'd="M0 8 C -14 -2, -10 -14, 0 -7 C 10 -14, 14 -2, 0 8 Z"/>')
+
+
+def sparkle(x, y, s, fill):
+    return (f'<path transform="translate({x} {y}) scale({s})" fill="{fill}" '
+            f'd="M0 -16 L4 -4 L16 0 L4 4 L0 16 L-4 4 L-16 0 L-4 -4 Z"/>')
+
+
+# ---------------------------------------------------------------- piezas
+
+def top_ribbons():
+    # cintas que entran por las esquinas superiores y se curvan
+    return "".join([
+        ribbon([((-60, 330), (40, 200), (120, 60), (360, -40))], 105, BURGUNDY, 0.7, 0.3),
+        ribbon([((-60, 230), (60, 120), (150, 40), (250, -50))], 60, PINK, 0.9, 1.2),
+        ribbon([((-40, 420), (10, 300), (40, 160), (150, -50))], 28, CREAM, 1.1, 0.4),
+        ribbon([((1140, 360), (1030, 230), (960, 70), (710, -40))], 105, BURGUNDY, 0.7, 2.0),
+        ribbon([((1140, 250), (1020, 140), (930, 50), (840, -50))], 60, PINK, 0.9, 0.2),
+        ribbon([((1120, 450), (1070, 320), (1040, 170), (930, -50))], 28, CREAM, 1.1, 1.6),
+    ])
+
+
+def bottom_ribbons():
+    # cintas que cruzan el borde inferior
+    return "".join([
+        ribbon([((-60, 1810), (200, 1900), (420, 1820), (620, 1865)),
+                ((620, 1865), (820, 1910), (960, 1830), (1140, 1760))], 64, BURGUNDY, 1.6, 0.4),
+        ribbon([((-60, 1870), (240, 1930), (520, 1850), (760, 1895)),
+                ((760, 1895), (900, 1920), (1020, 1870), (1140, 1810))], 36, PINK, 1.8, 1.4),
+        ribbon([((300, 1960), (500, 1870), (700, 1930), (900, 1930)),
+                ((900, 1930), (1000, 1930), (1080, 1900), (1140, 1860))], 18, CREAM, 2.2, 0.8),
+    ])
+
+
+def bow(cx, cy):
+    """Moño satinado (reemplaza las galletas)."""
+    return "".join([
+        ribbon([((cx - 6, cy + 10), (cx - 30, cy + 70), (cx - 90, cy + 110), (cx - 80, cy + 190))], 46, PINK, 0.5, 0.2),
+        ribbon([((cx + 6, cy + 10), (cx + 40, cy + 70), (cx + 30, cy + 140), (cx + 90, cy + 190))], 46, PINK, 0.5, 2.6),
+        ribbon([((cx, cy), (cx - 60, cy - 110), (cx - 170, cy - 40), (cx - 120, cy + 20)),
+                ((cx - 120, cy + 20), (cx - 90, cy + 60), (cx - 30, cy + 30), (cx, cy))], 56, PINK, 0.35, 0.0, 0.6),
+        ribbon([((cx, cy), (cx + 60, cy - 110), (cx + 170, cy - 40), (cx + 120, cy + 20)),
+                ((cx + 120, cy + 20), (cx + 90, cy + 60), (cx + 30, cy + 30), (cx, cy))], 56, PINK, 0.35, 0.0, -0.6),
+        f'<rect x="{cx - 26}" y="{cy - 30}" width="52" height="60" rx="18" fill="{hexc(BURGUNDY)}"/>',
+        f'<rect x="{cx - 14}" y="{cy - 22}" width="10" height="44" rx="5" fill="#fff" opacity=".2"/>',
+    ])
+
+
+def lanyard(girl, wordmark_burgundy):
+    """Credencial colgante con el logo, abajo a la izquierda."""
+    straps = (
+        ribbon([((40, 1330), (70, 1450), (110, 1560), (145, 1640))], 30, BURGUNDY, 0.4, 0.1)
+        + ribbon([((140, 1360), (170, 1460), (170, 1560), (155, 1640))], 30, PINK, 0.4, 0.5)
+    )
+    b, c = hexc(BURGUNDY), hexc(CREAM)
+    card = f"""
+    <g transform="translate(150 1650) rotate(-8)">
+      <circle cx="0" cy="0" r="16" fill="none" stroke="#d9d3c7" stroke-width="7"/>
+      <g filter="url(#soft)">
+        <rect x="-95" y="14" width="190" height="230" rx="24" fill="{c}" stroke="{b}" stroke-width="8"/>
+      </g>
+      <rect x="-32" y="34" width="64" height="12" rx="6" fill="{b}" opacity=".55"/>
+      <image href="{girl}" x="-62" y="58" width="124" height="124"/>
+      <image href="{wordmark_burgundy}" x="-78" y="182" width="156" height="51"/>
+    </g>"""
+    return straps + card
 
 
 def svg_markup():
     girl = data_uri(ASSETS / "bombi-girl-disc.png")
     wordmark = data_uri(ASSETS / "bombi-wordmark.png")
-    top = drip_path(300, TOP_DRIPS)
-    bottom = scallop_path(1752, 26)
-
-    # brillos en los goteos (efecto glaseado)
-    shines = "".join(
-        f'<rect x="{x + w * 0.12}" y="{300 + w * 0.2}" width="{w * 0.18}" '
-        f'height="{max(length - w * 0.9, 8)}" rx="{w * 0.09}" fill="#fff" opacity=".22"/>'
-        for x, w, length in TOP_DRIPS if length > 50
-    )
-    # chispas decorativas sobre la banda
-    sprinkles = "".join(
-        f'<rect x="{x}" y="{y}" width="16" height="5" rx="2.5" fill="{c}" '
-        f'transform="rotate({a} {x + 8} {y + 2.5})"/>'
-        for x, y, a, c in [
-            (40, 60, -30, PINK), (120, 230, 25, CREAM), (60, 160, 60, CARAMEL),
-            (980, 270, -20, PINK), (1010, 60, 40, CREAM), (900, 40, -55, CARAMEL),
-            (470, 40, 15, PINK), (420, 250, -40, CARAMEL), (1030, 180, 10, PINK),
-        ]
-    )
+    wordmark_b = data_uri(tinted(ASSETS / "bombi-wordmark.png", BURGUNDY))
+    p, c = hexc(PINK), hexc(CREAM)
 
     return f"""
 <svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">
   <defs>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#2b0710" flood-opacity=".35"/>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1e0509" flood-opacity=".45"/>
     </filter>
-    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#2b0710" flood-opacity=".4"/>
+    <filter id="text" x="-10%" y="-30%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#1e0509" flood-opacity=".65"/>
     </filter>
-    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="{BURGUNDY_DARK}"/>
-      <stop offset="1" stop-color="{BURGUNDY}"/>
-    </linearGradient>
-    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="{BURGUNDY}"/>
-      <stop offset="1" stop-color="{BURGUNDY_DARK}"/>
-    </linearGradient>
-    <path id="stampRing" d="M 0 -80 A 80 80 0 1 1 -0.01 -80"/>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#2b0710" flood-opacity=".5"/>
+    </filter>
   </defs>
 
-  <!-- marco fino -->
-  <rect x="34" y="34" width="1012" height="1852" rx="52" fill="none" stroke="{CREAM}" stroke-width="5" opacity=".95"/>
-  <rect x="48" y="48" width="984" height="1824" rx="42" fill="none" stroke="{PINK}" stroke-width="2.5" opacity=".9"/>
+  <!-- ARRIBA -->
+  <g filter="url(#glow)">{top_ribbons()}</g>
 
-  <!-- BANDA SUPERIOR: rosa + crema + goteo de chocolate -->
-  <g filter="url(#shadow)">
-    <path d="{top}" fill="{PINK}" stroke="{PINK}" stroke-width="40" stroke-linejoin="round"/>
-    <path d="{top}" fill="{CREAM}" stroke="{CREAM}" stroke-width="20" stroke-linejoin="round"/>
-    <path d="{top}" fill="url(#band)"/>
-  </g>
-  {shines}
-  {sprinkles}
-
-  <!-- logo -->
   <g filter="url(#soft)">
-    <circle cx="275" cy="200" r="140" fill="{CREAM}"/>
-    <circle cx="275" cy="200" r="130" fill="{PINK}"/>
+    <circle cx="300" cy="215" r="104" fill="{c}"/>
+    <circle cx="300" cy="215" r="96" fill="{p}"/>
   </g>
-  <image href="{girl}" x="{275 - 116}" y="{200 - 116}" width="232" height="232"/>
+  <image href="{girl}" x="{300 - 86}" y="{215 - 86}" width="172" height="172"/>
 
-  <image href="{wordmark}" x="440" y="70" width="430" height="140"/>
-  <text x="452" y="250" font-family="Poppins" font-weight="500" font-size="32" letter-spacing="2" fill="{CREAM}">HANDMADE COOKIES</text>
-  <text x="452" y="290" font-family="Poppins" font-weight="500" font-size="32" letter-spacing="2" fill="{PINK}">&amp; BROWNIES</text>
-
-  <!-- etiqueta EST. 2020 colgando del logo -->
-  <g filter="url(#soft)">
-    <rect x="205" y="330" width="140" height="44" rx="22" fill="{CREAM}" stroke="{BURGUNDY}" stroke-width="3"/>
-  </g>
-  <text x="275" y="360" text-anchor="middle" font-family="Poppins" font-weight="700" font-size="21" letter-spacing="3" fill="{BURGUNDY}">EST. 2020</text>
-
-  <!-- BASE INFERIOR: festón -->
-  <g filter="url(#shadow)">
-    <path d="{bottom}" fill="{PINK}" stroke="{PINK}" stroke-width="44" stroke-linejoin="round"/>
-    <path d="{bottom}" fill="{CREAM}" stroke="{CREAM}" stroke-width="22" stroke-linejoin="round"/>
-    <path d="{bottom}" fill="url(#base)"/>
-  </g>
-  <text x="430" y="1848" text-anchor="middle" font-family="Poppins" font-weight="700" font-size="64" fill="{CREAM}">@bombive_</text>
-  <text x="430" y="1894" text-anchor="middle" font-family="Lora" font-style="italic" font-size="32" fill="{PINK}">Maracay · Turmero</text>
-
-  <!-- sello "hecho a mano" -->
-  <g transform="translate(905 1715) rotate(-10)">
-    <g filter="url(#soft)">
-      <circle r="112" fill="{CREAM}"/>
-    </g>
-    <circle r="102" fill="none" stroke="{BURGUNDY}" stroke-width="4"/>
-    <circle r="54" fill="none" stroke="{PINK}" stroke-width="3" stroke-dasharray="1 9" stroke-linecap="round"/>
-    <text font-family="Poppins" font-weight="700" font-size="18" fill="{BURGUNDY}">
-      <textPath href="#stampRing" textLength="496" lengthAdjust="spacing">HECHO A MANO • HORNEADO CON AMOR •</textPath>
-    </text>
-    <path transform="translate(0 4) scale(2.2)" fill="{PINK}"
-          d="M0 8 C -14 -2, -10 -14, 0 -7 C 10 -14, 14 -2, 0 8 Z"/>
-    <text y="-26" text-anchor="middle" font-family="Poppins" font-weight="700" font-size="15" letter-spacing="2" fill="{BURGUNDY}">100%</text>
-    <text y="46" text-anchor="middle" font-family="Lora" font-style="italic" font-size="22" fill="{BURGUNDY}">artesanal</text>
+  <g filter="url(#text)">
+    <image href="{wordmark}" x="420" y="120" width="380" height="124"/>
+    <text x="430" y="282" font-family="Poppins" font-weight="600" font-size="27" letter-spacing="2" fill="{c}">HANDMADE COOKIES <tspan fill="{p}">&amp; BROWNIES</tspan></text>
   </g>
 
-  <!-- corazones -->
-  <g fill="{PINK}">
-    <path transform="translate(770 1640) scale(1.4) rotate(-12)" d="M0 8 C -14 -2, -10 -14, 0 -7 C 10 -14, 14 -2, 0 8 Z"/>
-    <path transform="translate(735 1690) scale(.8) rotate(10)" d="M0 8 C -14 -2, -10 -14, 0 -7 C 10 -14, 14 -2, 0 8 Z" fill="{CREAM}"/>
+  <!-- lateral -->
+  <text transform="translate(1032 1560) rotate(-90)" font-family="Lora" font-style="italic" font-size="34"
+        fill="{c}" opacity=".92" filter="url(#text)">Hecho a mano, horneado con amor</text>
+
+  <!-- ABAJO -->
+  <g filter="url(#glow)">{bottom_ribbons()}</g>
+  <g filter="url(#glow)">{lanyard(girl, wordmark_b)}</g>
+  <g filter="url(#glow)">{bow(905, 1715)}</g>
+
+  <g filter="url(#text)">
+    <text x="560" y="1790" text-anchor="middle" font-family="Poppins" font-weight="700" font-size="60" fill="{c}">@bombive_</text>
+    <text x="560" y="1836" text-anchor="middle" font-family="Lora" font-style="italic" font-size="32" fill="{c}">Maracay · Turmero</text>
   </g>
-  <g fill="{CREAM}" opacity=".95">
-    <path transform="translate(110 1690)" d="M0 -16 L4 -4 L16 0 L4 4 L0 16 L-4 4 L-16 0 L-4 -4 Z"/>
-    <path transform="translate(150 1650) scale(.55)" d="M0 -16 L4 -4 L16 0 L4 4 L0 16 L-4 4 L-16 0 L-4 -4 Z"/>
-  </g>
+  {heart(760, 1600, 1.6, p, -12)}{heart(720, 1650, .9, c, 10)}{heart(345, 1610, 1.1, p, 14)}
+  {sparkle(985, 1540, .8, c)}{sparkle(395, 1680, .6, c)}{sparkle(80, 420, .7, c)}{sparkle(1000, 470, .6, c)}
 </svg>"""
 
 
 HTML = """<!doctype html><html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&family=Lora:ital@1&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Lora:ital@1&display=block" rel="stylesheet">
 <style>html,body{{margin:0;background:transparent}}svg{{display:block}}</style>
 </head><body>{svg}</body></html>"""
 
@@ -180,23 +222,18 @@ HTML = """<!doctype html><html><head><meta charset="utf-8">
 def preview_background():
     """Fondo de prueba parecido a una foto (degradado + silueta)."""
     bg = Image.new("RGB", (W, H))
-    px = bg.load()
-    top, bot = (150, 120, 130), (205, 190, 150)
+    d = ImageDraw.Draw(bg)
+    top, bot = (150, 140, 150), (190, 180, 165)
     for y in range(H):
         t = y / H
-        c = tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3))
-        for x in range(W):
-            px[x, y] = c
-    d = ImageDraw.Draw(bg)
+        d.line([(0, y), (W, y)], fill=tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3)))
     d.ellipse((340, 600, 740, 1000), fill=(118, 94, 84))
     d.rounded_rectangle((300, 980, 780, 1700), radius=170, fill=(68, 68, 78))
     return bg.filter(ImageFilter.GaussianBlur(2))
 
 
-def main():
-    OUT.mkdir(exist_ok=True)
-    (OUT / "bombi-story-frame.svg.html").write_text(HTML.format(svg=svg_markup()))
-    # Render con el Playwright de Node (Chromium) y fondo transparente
+def render(html_path, png_path):
+    """Render con el Playwright de Node (Chromium) y fondo transparente."""
     script = """
 const {{ chromium }} = require('playwright');
 (async () => {{
@@ -207,15 +244,25 @@ const {{ chromium }} = require('playwright');
   await p.screenshot({{ path: {png}, omitBackground: true }});
   await b.close();
 }})();
-""".format(w=W, h=H, url=json.dumps((OUT / "bombi-story-frame.svg.html").resolve().as_uri()),
-           png=json.dumps(str(OUT / "bombi-story-frame.png")))
+""".format(w=W, h=H, url=json.dumps(html_path.resolve().as_uri()), png=json.dumps(str(png_path)))
     subprocess.run(["node", "-e", script], check=True)
 
+
+def main(background=None):
+    OUT.mkdir(exist_ok=True)
+    html = OUT / "bombi-story-frame.svg.html"
+    html.write_text(HTML.format(svg=svg_markup()))
+    render(html, OUT / "bombi-story-frame.png")
+    for tmp in OUT.glob("_*.png"):
+        tmp.unlink()
+
     overlay = Image.open(OUT / "bombi-story-frame.png").convert("RGBA")
-    preview = preview_background().convert("RGBA")
+    preview = (Image.open(background).convert("RGB").resize((W, H)) if background
+               else preview_background()).convert("RGBA")
     preview.alpha_composite(overlay)
     preview.convert("RGB").save(OUT / "bombi-story-preview.jpg", quality=92)
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main(sys.argv[1] if len(sys.argv) > 1 else None)
